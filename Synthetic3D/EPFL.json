@@ -1,0 +1,41 @@
+{
+    "shape_of_data": [256, 256, 256],
+    "channel_num": 3,
+
+    "dict_of_organells": {
+        "Mitohondrion": 0,
+        "Vesicles": 1,
+        "Membranes": 2
+    },
+
+    "max_count_of_organells": {
+        "Mitohondrion": 4,
+        "Vesicles": 6,
+        "EmptyCell": 6
+    },
+
+    "membran_color": [60, 20],
+    "poisson_noise": 10,
+
+    "backgraund": {
+        "background_color": [185, 20],
+        "background_noise_color": [135, 150],
+        "density": 0.001,
+        "gaussian_radius": 3,
+        "gaussian_sigma": 5
+    },
+
+    "gaussian_blur_radius": 5,
+    "gaussian_blur_sigma": 2,
+
+    "mask_blur_threshold": 64,
+
+    "vesicles": {
+        "number_of_vesicles": [25, 150],
+        "radius_of_vesicle": [5, 10],
+        "color": [116, 20],
+        "color_inner": [136, 15],
+        "probability_of_vesicle_filling": 0.75,
+        "thickness" : 1
+    }
+}

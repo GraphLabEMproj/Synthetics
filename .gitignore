@@ -5,8 +5,10 @@
 *.d
 
 dataset/
-
+datasets/
 test_gen*
+
+*.log
 
 # Object files
 *.o
@@ -18,6 +20,9 @@ test_gen*
 *.ilk
 *.map
 *.exp
+
+*.xml
+*.iml
 
 # Precompiled Headers
 *.gch

@@ -3,9 +3,12 @@ import math
 import numpy as np
 from scipy.optimize import least_squares
 
-from Synthetic3D.src.hard.vertex import Vertex
+from Synthetic3D.src.hard.vector_operation import normalize_vector, scale_vector_to_length
 
 
+######################################################################################################################### переписать модуль !
+
+# old
 def ellipse3D_through_points_and_tangents(P1, T1, P2, T2):
     normal = np.cross(T1, T2)
     norm_normal = np.linalg.norm(normal)
@@ -95,21 +98,6 @@ def ellipse3D_through_points_and_tangents(P1, T1, P2, T2):
     return point_between
 
 
-def normalize_vector(v):
-    """Нормализует вектор v."""
-    norm = np.linalg.norm(v)
-    if norm == 0:
-        return v
-    return v / norm
-
-def scale_tangent_to_radius(T, radius):
-    """
-    Масштабирует касательную T так, чтобы ее длина была равна радиусу.
-    """
-    T_norm = np.linalg.norm(T)
-    if T_norm == 0:
-        raise ValueError("Касательная не должна быть нулевым вектором.")
-    return (T / T_norm) * radius
 
 def find_circle_center(P1, T1, P2, T2):
     """
@@ -144,6 +132,7 @@ def compute_radius(P, center):
     """Вычисляет радиус как расстояние между точкой и центром окружности."""
     return np.linalg.norm(P - center)
 
+######################################################################################################################### переписать модуль !
 def calculate_orto_vec(vec, normal):
     if all(element == 0 for element in normal):
         print("Zero normal vector detected!")
@@ -207,13 +196,7 @@ def hermite_point_at_half(p0, p1, m0, m1):
     point = h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1
     return point
 
-def split_half_curve(vertex1:Vertex, vertex2:Vertex):
-
-    point1 = np.array(vertex1.vertex)
-    point2 = np.array(vertex2.vertex)
-
-    normal1 = np.array(vertex1.normal, dtype=float)
-    normal2 = np.array(vertex2.normal, dtype=float)
+def split_half_curve(point1, normal1, point2, normal2):
 
     split_normal = vector_sum_with_save_len(normal1, normal2)
     #split_normal = normalize_vector(split_normal)
@@ -245,12 +228,17 @@ def split_half_curve(vertex1:Vertex, vertex2:Vertex):
             radius = compute_radius(point1, center) * 1.5
 
             # Масштабируем касательные до длины радиуса
-            cas_v2_v1_and_n1 = scale_tangent_to_radius(-cas_v2_v1_and_n1, radius)
-            cas_v1_v2_and_n2 = scale_tangent_to_radius(cas_v1_v2_and_n2, radius)
-        else:
-            print("Не удалось определить центр окружности.")
+            cas_v2_v1_and_n1 = scale_vector_to_length(-cas_v2_v1_and_n1, radius)
+            cas_v1_v2_and_n2 = scale_vector_to_length(cas_v1_v2_and_n2, radius)
 
-        half_point = tuple(np.round(((point1 + point2)*4 + cas_v2_v1_and_n1 - cas_v1_v2_and_n2)/8).astype(int).tolist())
+            half_point = hermite_point_at_half(point1, point2, cas_v2_v1_and_n1, cas_v1_v2_and_n2)
+        else:
+            # лежат на прямой
+            half_point = np.array([(point1[0] + point2[0]) / 2,
+                                   (point1[1] + point2[1]) / 2,
+                                   (point1[2] + point2[2]) / 2])
+
+        #half_point = tuple(np.round(((point1 + point2)*4 + cas_v2_v1_and_n1 - cas_v1_v2_and_n2)/8).astype(int).tolist())
 
         #a = 10
         #b = 10
@@ -261,23 +249,7 @@ def split_half_curve(vertex1:Vertex, vertex2:Vertex):
 
         #raise Exception("user stop")
 
-        half_point = np.round(hermite_point_at_half(point1, point2, cas_v2_v1_and_n1, cas_v1_v2_and_n2)).astype(int)
-        print(point1, point2, half_point)
+        #print(point1, point2, half_point)
         #raise Exception("User ex")
 
-    return Vertex(half_point, split_normal)
-
-def split_triangle(vertex1:Vertex, vertex2:Vertex, vertex3:Vertex):
-
-    split_vertex_1 = split_half_curve(vertex1, vertex2)
-    split_vertex_2 = split_half_curve(vertex2, vertex3)
-    split_vertex_3 = split_half_curve(vertex1, vertex3)
-
-    new_triangle_list = [
-        (vertex1, split_vertex_1, split_vertex_3),
-        (split_vertex_1, vertex2, split_vertex_2),
-        (split_vertex_1, split_vertex_2, split_vertex_3),
-        (split_vertex_2, split_vertex_3, vertex3)
-    ]
-    return new_triangle_list
-
+    return half_point, split_normal
