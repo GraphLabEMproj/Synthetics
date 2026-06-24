@@ -49,6 +49,7 @@ class Organell(abc.ABC):
                        "thickness":  0}
 
         self.num_partition_of_triangles = 0
+        self.warnings = []
     # ABSTRACT
     @abc.abstractmethod
     def _check_and_set_default_params(self) -> list[str]: pass # задает параметры генерации класса, если они не были заданы

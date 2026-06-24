@@ -4,13 +4,13 @@ from Synthetic3D.src.hard.drawing_and_filliing.fill_sphere import fill_small_sph
 
 from Synthetic3D.src.organells.abstract_organell import Organell
 from Synthetic3D.src.hard.structure.vector import Vector
-from Synthetic3D.src.hard.random_params import get_rand_int, get_bool_rand_probability, color_dim_check, choise_use_color_by_param
+from Synthetic3D.src.hard.random_params import get_rand_int, get_bool_rand_probability, color_dim_check, choise_use_color_by_param, get_color_index_fun_by_param
 from Synthetic3D.src.utilities.check_of_params import check_param
 
 from Synthetic3D.src.utilities.logging_config import logger
 
 
-ACCEPTABLE_TYPES_OF_VESICLE_CLUSTER_SHAPES = ["Cuboid"]
+ACCEPTABLE_TYPES_OF_VESICLE_CLUSTER_SHAPES = ["Cuboid", "Ellipsoid"]
 
 
 class Vesicles(Organell):
@@ -36,15 +36,21 @@ class Vesicles(Organell):
         warning_list+=check_param(self.params, "radius_of_vesicle", (3,6))
         warning_list+=check_param(self.params, "probability_of_vesicle_filling", 0.5)
         warning_list+=check_param(self.params, "thickness", 0.5)
-        warning_list+=check_param(self.params, "color", (255, 0, 0))
-        warning_list+=check_param(self.params, "color_inner", (0, 255, 0))
+        warning_list+=check_param(self.params, "membrane_color", (255, 0, 0))
+        warning_list+=check_param(self.params, "inner_color", (0, 255, 0))
 
         warning_list+=check_param(self.params, "number_of_vesicles", (25, 100))
         warning_list+=check_param(self.params, "max_num_of_attempts2cloud", 1000)
         warning_list+=check_param(self.params, "gap_of_vesicules", 1)
 
-        warning_list+=check_param(self.params, "type_of_shape", "Cuboid")
-        warning_list+=check_param(self.params, "cuboud_shape_radius", (50,25,25))
+        warning_list+=check_param(self.params, "type_of_shape", "Ellipsoid")
+        if self.params["type_of_shape"] == "Cuboid":
+            warning_list+=check_param(self.params, "cuboud_shape_radius", (75,50,50))
+        elif self.params["type_of_shape"] == "Ellipsoid":
+            warning_list+=check_param(self.params, "ellipsoid_shape_radius", (70,50,30))
+        else:
+            msg = f"ERROR! Type of shape of vesicules cloud may be only: {ACCEPTABLE_TYPES_OF_VESICLE_CLUSTER_SHAPES}"
+            raise ValueError(msg)
 
         if len(warning_list) != 0:
             logger.config(f'\tWarning Vesicles!\n{"\n".join(warning_list)}')
@@ -54,6 +60,17 @@ class Vesicles(Organell):
     def _Create(self):
         warnings_list = []
         # radius_list нужен для расчета пересечений
+        self.params["thickness"] = get_rand_int(self.params["thickness"])
+
+        if self.params["type_of_shape"] == "Cuboid":
+            x_radius, y_radius, z_radius = self.params["cuboud_shape_radius"]
+            self.max_cloud_radius = np.linalg.norm((x_radius,y_radius,z_radius))
+        elif self.params["type_of_shape"] == "Ellipsoid":
+            x_radius, y_radius, z_radius = self.params["ellipsoid_shape_radius"]
+            self.max_cloud_radius = max(x_radius, y_radius, z_radius)
+
+        self.max_radius = max(self.params["radius_of_vesicle"])
+
         self.radius_list = []
         if isinstance(self.params["number_of_vesicles"], int) and self.params["number_of_vesicles"] == 1:
             warnings_list = self.CreateAlone()
@@ -74,7 +91,7 @@ class Vesicles(Organell):
 
     ##################################### ТЕСТОВАЯ РЕАЛИЗАЦИЯ №№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№
     def CreateCloude(self):
-        print("WARNING!!! CREATE TEST ONE VESICLES CLOUDE")
+        print("WARNING!!! CREATE TEST VESICLES CLOUDE")
 
         warnings_list = []
 
@@ -119,10 +136,11 @@ class Vesicles(Organell):
             self.global_miss_point_counter += attempt_counter
 
         if miss_point_counter != 0:
-            warnings_list.append('WARNING! Class "Vesicles". '+\
-                                 f'Failed to add {miss_point_counter} point of {num_point} to cluster. '+\
-                                 f'Maximum number of attempts reached {max_num_of_attempts2cloud}.')
-
+            warning_mesg = 'Class "Vesicles". '+\
+                           f'Failed to add {miss_point_counter} point of {num_point} to cluster. '+\
+                           f'Maximum number of attempts reached {max_num_of_attempts2cloud}.'
+            warnings_list.append("WARNING! " + warning_mesg)
+            logger.organelle(warning_mesg)
         warnings_list.append(f"Mean of error attempt: {self.global_miss_point_counter/num_point}")
         self._CalculateViewData()
         return warnings_list
@@ -149,11 +167,31 @@ class Vesicles(Organell):
             ######################################################################################################################## PARAM !
             x_radius, y_radius, z_radius = self.params["cuboud_shape_radius"]
 
-            x = np.random.randint(-x_radius, x_radius)
-            y = np.random.randint(-y_radius, y_radius)
-            z = np.random.randint(-z_radius, z_radius)
+            x = np.random.randint(-x_radius, x_radius+1)
+            y = np.random.randint(-y_radius, y_radius+1)
+            z = np.random.randint(-z_radius, z_radius+1)
 
             return Vector(x, y, z)
+
+        if type_of_shape == "Ellipsoid":
+            # Параметры радиусов по осям эллипсоида
+            x_radius, y_radius, z_radius = self.params["ellipsoid_shape_radius"]
+
+            # Генерация точки внутри единичного эллипсоида (x^2/a^2 + y^2/b^2 + z^2/c^2 <= 1)
+            attempt_gen_counter = 0
+            max_attempt_gen_counter = 10000
+            while attempt_gen_counter < max_attempt_gen_counter:
+                x = np.random.randint(-x_radius, x_radius+1)
+                y = np.random.randint(-y_radius, y_radius+1)
+                z = np.random.randint(-z_radius, z_radius+1)
+                # Проверка, внутри ли точка эллипсоида
+                if (x / x_radius) ** 2 + (y / y_radius) ** 2 + (z / z_radius) ** 2 <= 1:
+                    return Vector(x, y, z)
+
+                attempt_gen_counter+=1
+
+            msg = "ERROR! Error in the formula for generating points inside an ellipse"
+            raise RuntimeError(msg)
 
         #elif
         else:
@@ -166,10 +204,23 @@ class Vesicles(Organell):
     def Draw(self, data):
         self.view_shell.transform_coords2int()
 
+        membrane_color_param = self.params["membrane_color"]
+        get_fun_type = get_color_index_fun_by_param(membrane_color_param)
+        # задание основного и цвета в диапазоне для снижения разброса интенсивностей в одном скоплении
+        if get_fun_type == 2:
+            main_interior_color = choise_use_color_by_param(membrane_color_param)
+            min_range = membrane_color_param[0] - membrane_color_param[1]
+            max_range = membrane_color_param[0] + membrane_color_param[1]
+            change_3sigma = min(abs(main_interior_color - min_range),
+                                abs(max_range - main_interior_color))
+            use_membrane_color_param = (main_interior_color, change_3sigma)
+        else:
+            use_membrane_color_param = membrane_color_param
+
         for i, frame_point in enumerate(self.view_shell.get_frames()):
-            work_membrane_color = color_dim_check(choise_use_color_by_param(self.params["color"]), data.shape)
+            work_membrane_color = color_dim_check(choise_use_color_by_param(use_membrane_color_param), data.shape)
             if self.filling_list[i]:
-                work_inner_color = color_dim_check(choise_use_color_by_param(self.params["color_inner"]), data.shape)
+                work_inner_color = color_dim_check(choise_use_color_by_param(self.params["inner_color"]), data.shape)
                 fill_small_sphere(data,
                                   frame_point,
                                   self.radius_list[i],

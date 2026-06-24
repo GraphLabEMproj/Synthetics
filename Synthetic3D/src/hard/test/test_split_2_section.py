@@ -4,6 +4,7 @@ from Synthetic3D.src.hard.structure.shells import OuterShell
 from Synthetic3D.src.hard.structure.triangle import list_of_triangle_to_2_arrs_vertexes_and_edges
 from Synthetic3D.src.hard.structure.edge import Edge
 from Synthetic3D.src.utilities.view_data import view_vtk_3D_data
+from Synthetic3D.src.hard.structure.vertex import Vertex
 
 import numpy as np
 import pyvista as pv
@@ -138,9 +139,9 @@ def view_shell(shell):
 
     # Визуализация
     plotter = pv.Plotter()
-    #plotter.add_mesh(mesh, color=(255,0,0), show_edges=False)
-    #added_edges_in_plotter(plotter, arr_pos, shell)
-    added_triangle_edges_in_plotter(plotter, arr_pos, shell)
+    plotter.add_mesh(mesh, color=(255,0,0), show_edges=False)
+    added_edges_in_plotter(plotter, arr_pos, shell)
+    #added_triangle_edges_in_plotter(plotter, arr_pos, shell)
     plotter.show()
 
 def test_split_triangles():
@@ -155,7 +156,7 @@ def test_split_triangles():
 
     last_indexes = [[0, 1, 2, 3], [0, 1, 2, 3]]
 
-    for i in range(2):
+    for i in range(5):
         new_sec = Section(Vector(50*(1+i) , 0, 0), Vector(1, 0, 0), 100, 100, angle=0)
 
         # NEW SECTION INDEXES
@@ -240,7 +241,7 @@ def test_split_triangles_reverse():
 
     current_pos = Vector()
 
-    for i in range(4):
+    for i in range(3):
         vec = Vector(0, 0, -1) + Vector((*np.random.random(size=2), 0))
         vec /= np.linalg.norm(vec)
 
@@ -273,6 +274,9 @@ def test_split_triangles_reverse():
 
         Section.AddSection(last_indexes, new_section_indexes, shell)
         last_indexes = new_section_indexes
+
+    end_point = Vertex(current_pos + vec*100, vec)
+    Section.AddEdgeEndPoint(last_indexes, end_point, shell)
 
     np.set_printoptions(precision=3, suppress=True)
 

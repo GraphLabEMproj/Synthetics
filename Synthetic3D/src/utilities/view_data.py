@@ -178,7 +178,7 @@ def view_vtk_3D_data(data, vertex_list: list[Vertex]=None, center_point=None):
     # Создаем рендерер и добавляем актер
     renderer = vtk.vtkRenderer()
     renderer.AddActor(glyphActor)
-    renderer.SetBackground(0.1, 0.2, 0.4)
+    renderer.SetBackground(1.0, 1.0, 1.0)
 
     if vertex_list is not None:
         vertices_actor = create_vector_actor(vertex_list)

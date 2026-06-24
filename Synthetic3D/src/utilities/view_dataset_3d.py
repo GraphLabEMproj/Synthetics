@@ -379,7 +379,6 @@ if __name__ == "__main__":
     print("smooth_data")
     '''
 
-    '''
     path_to_data = "D:/Projects/UnetClass/pytorch/segmentation/data/original data/training"
     class_name_list = ["mitochondria", "PSD", "vesicles", "axon", "boundaries", "mitochondrial boundaries"]
     read_slices = 25
@@ -414,8 +413,9 @@ if __name__ == "__main__":
 
     data_epfl = gaussian_filter(data_epfl,radius=2,sigma=3)
     print(len(masks_list))
-    '''
 
+
+    '''
     class_name_list = ["kristae"]
     read_slices = 6
 
@@ -450,6 +450,6 @@ if __name__ == "__main__":
 
     data_epfl = gaussian_filter(data_epfl, radius=3, sigma=2)
     print("smooth_data")
-
+    '''
 
     view_vtk_3D_data_list(masks_list, data_epfl)

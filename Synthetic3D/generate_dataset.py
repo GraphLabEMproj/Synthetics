@@ -4,6 +4,8 @@ from Synthetic3D.src.container.main_field import MainField
 from Synthetic3D.src.utilities.view_data import view_vtk_3D_data
 from Synthetic3D.src.utilities.logging_config import clear_log_file
 
+from Synthetic3D.utils.statistic import run_check_statistic_syn_dataset
+
 #Удалить прошлую сессию
 clear_log_file()
 
@@ -34,7 +36,7 @@ print(log_list[-1])
 s_t_add = time.time()
 generator.AddCellsByConfig()
 e_t_add = time.time()
-log_list.append(f"Затраты времени на создание добавление 16 органелл {e_t_add-s_t_add} сек")
+log_list.append(f"Затраты времени на создание добавление {generator.count_organells} из запланированных {sum(config['max_count_of_organells'].values())} органелл {e_t_add-s_t_add} сек")
 print(log_list[-1])
 
 s_t_exp = time.time()
@@ -86,6 +88,8 @@ print(log_list[-1])
 print()
 for str_log in log_list:
     print(str_log)
+
+run_check_statistic_syn_dataset(generator.params["save_dataset_dir"])
 
 view_vtk_3D_data(generator.data)
 view_vtk_3D_data(generator.masks[0])

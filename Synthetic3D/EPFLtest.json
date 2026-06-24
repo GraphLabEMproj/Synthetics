@@ -1,5 +1,5 @@
 {
-    "shape_of_data": [512, 512, 512],
+    "shape_of_data": [128, 128, 128],
     "channel_num": 3,
 
     "dict_of_organells": {
@@ -9,18 +9,18 @@
     },
 
     "max_count_of_organells": {
-        "Mitohondrion": 16,
-        "Vesicles": 16,
-        "EmptyCell": 32,
+        "Mitohondrion": 1,
+        "Vesicles": 1,
+        "EmptyCell": 1,
         "AxonShell": 1
     },
 
-    "membrane_color": [92, 10],
+    "membrane_color": [86, 13],
     "distance_cell_shift_range": [0,2],
 
     "backgraund": {
         "background_color": [188, 10],
-        "background_noise_color": [94, 30],
+        "background_noise_color": [95, 30],
         "density": 0.001,
         "gaussian_radius": 4,
         "gaussian_sigma": 2
@@ -35,7 +35,7 @@
     "vesicles": {
         "number_of_vesicles": [180, 400],
         "radius_of_vesicle": [4, 7],
-        "membrane_color": [92, 9],
+        "membrane_color": [88, 9],
         "inner_color": [111, 12],
         "probability_of_vesicle_filling": 1.0,
         "thickness" : [1, 2]

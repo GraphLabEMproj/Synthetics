@@ -28,7 +28,7 @@ class Section:
     """
 
     def __init__(self, position:Vector, direction:Vector, ru, rv, angle=(-22,22), reversed=1):
-        print("position", position, "direction", direction)
+        #print("position", position, "direction", direction)
         self.position = Vertex(position, direction) # хранит центральную точку и вектор нормали к плоскости секции
         assert abs(reversed) == 1, "reversed can be onli 1 or -1"
         self.reversed = reversed

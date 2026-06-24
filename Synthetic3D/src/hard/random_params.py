@@ -39,7 +39,7 @@ def get_random_int_value_with_gaussian_distribution(mean, scatter_range):
     :return: целое число
     """
 
-    return int(np.random.normal(mean, scatter_range/3)+0.495)
+    return int(np.random.normal(mean, scatter_range)+0.495)
 
 
 def get_random_color_with_gaussian_distribution(mean, scatter_range):
@@ -52,6 +52,7 @@ def get_random_color_with_gaussian_distribution(mean, scatter_range):
 
     return np.clip(get_random_int_value_with_gaussian_distribution(mean, scatter_range), 0, 255)
 
+
 def choise_use_color_by_param(color_param):
     if isinstance(color_param, (int, np.integer)): # INT
         return color_param
@@ -63,6 +64,33 @@ def choise_use_color_by_param(color_param):
         return [choise_use_color_by_param(val) for val in color_param]
     else:
         raise ValueError(f'Невозможно преобразовать входные данные "{color_param}" в цвет.')
+
+def get_color_index_fun_by_param(color_param):
+    if isinstance(color_param, (int, np.integer)): # INT
+        return 0
+    elif len(color_param) == 1: # INT
+        return 1
+    elif len(color_param) == 2: # MEAN AND RANGE
+        return 2
+    elif len(color_param) == 3: # RGB or complex parameter (such as a list of lists)
+        return 3
+    else:
+        raise ValueError(f'Невозможно преобразовать входные данные "{color_param}" в цвет.')
+
+def get_color_fun_by_param(color_param):
+    if isinstance(color_param, (int, np.integer)): # INT
+        return lambda: color_param
+    elif len(color_param) == 1: # INT
+        return lambda: color_param[0]
+    elif len(color_param) == 2: # MEAN AND RANGE
+        def gaussian_distribution_wiper():
+            return get_random_color_with_gaussian_distribution(*color_param)
+        return gaussian_distribution_wiper
+    elif len(color_param) == 3: # RGB or complex parameter (such as a list of lists)
+        return lambda: [choise_use_color_by_param(val) for val in color_param]
+    else:
+        raise ValueError(f'Невозможно преобразовать входные данные "{color_param}" в цвет.')
+
 
 def color_dim_check(color, data_shape):
     assert isinstance(data_shape,  (np.integer, int)) or len(data_shape) > 2, f"Работа только с трехмерными данными. Пришел data_shape {data_shape}."

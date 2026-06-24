@@ -1,5 +1,5 @@
 import numpy as np
-from Synthetic3D.src.hard.rotate import rotate_3d
+from Synthetic3D.src.hard.rotate import rotate_3d, get_rotate_matrix
 from Synthetic3D.src.hard.structure.vector import Vector
 #from Synthetic3D.src.utilities.logging_config import logger
 
@@ -15,7 +15,11 @@ class ExpandableVectorArray:
                         self._array = args[0].astype(dtype)
 
                 elif isinstance(args[0], (list, tuple)):
-                    self._array = np.array(args[0], dtype=dtype)
+                    iterateble_value = args[0]
+                    if len(iterateble_value) == 0:
+                        self._array = np.zeros((0, 3), dtype=dtype)
+                    else:
+                        self._array = np.array(iterateble_value, dtype=dtype)
                 else: # one element of data or Vector
                     self._array = np.array(args, dtype=dtype)
             else:
@@ -24,6 +28,8 @@ class ExpandableVectorArray:
             self._array = np.zeros((0,3), dtype=dtype)
         self.dtype = self._array.dtype
         self._new_data = []
+        #print(args)
+        assert self._array.shape[1] == 3, f"Ошибка размерности при создании постоянной в ExpandableVectorArray {self._array}, {self._array.shape}"
 
     def size(self) -> int:
         return len(self._new_data) + len(self._array)
@@ -132,7 +138,7 @@ class ExpandableVectorArray:
             dtype = self.dtype
 
         if len_list + len_arr == 0:
-            return []
+            return np.zeros((0, 3), dtype=dtype)
         else:
             new_array = np.zeros((len_arr+len_list, 3), dtype=dtype)
             new_array[:len_arr] = self._array
@@ -157,13 +163,21 @@ class ExpandableVectorArray:
             self._array += vector
 
     def rotate(self, angle:Vector):
-        self._list_to_array()
-        #####################################################################################можно улучшить переведя расчеты по матрице массива
-        roteted_array = np.zeros_like(self._array, dtype=float)
-        for i in range(len(self._array)):
-            roteted_array[i] = rotate_3d(self._array[i], angle)
-        self._array = roteted_array
-        self.dtype=float
+       """
+       Поворачивает все точки массива self._array (Nx3) на заданные углы Эйлера.
+       Углы задаются в градусах, порядок поворотов: X -> Y -> Z.
+       """
+       # Преобразуем входной список/кортеж в массив NumPy, если это ещё не сделано
+       self._list_to_array()
+
+       R = get_rotate_matrix(angle)
+       # Применяем матрицу ко всем точкам.
+       # Если points имеют форму (N, 3) (каждая строка – точка),
+       # то (R @ points.T).T даёт повёрнутые точки.
+       self._array = (R @ self._array.T).T
+
+       # Устанавливаем тип данных (если нужно)
+       self.dtype = float
 
     def reverse(self):
         self._list_to_array()

@@ -3,7 +3,7 @@ from Synthetic3D.src.hard.random_params import get_rand_int
 from Synthetic3D.src.utilities.logging_config import logger
 
 from Synthetic3D.src.hard.vector_operation import create_new_2d_plane_by_point_and_normal, \
-            plane_coord_to_3d, normalize_vector
+            plane_coord_to_3d
 
 from Synthetic3D.src.hard.dictance import min_distance_between_segments
 
@@ -29,7 +29,7 @@ def is_intersection_with_added_points(x, y,
 
 
 
-def rotate_vector_random_direction(vector, angle_degrees):
+def rotate_vector_random_direction(vector, angle_degrees, attempt_expansion=0):
     """
     Поворачивает вектор на заданный угол в случайном направлении.
     Возвращает повернутый вектор.
@@ -38,14 +38,20 @@ def rotate_vector_random_direction(vector, angle_degrees):
 
     # Выбираем сторону отклонения: +1 или -1
     direction_sign = np.random.choice([1, -1])
-    angle_radians = np.radians(angle_degrees * direction_sign)
+
+    expand_old_attempt_angle = angle_degrees
+    if attempt_expansion > 0.5: # Добавка от angle_degrees до 90 градусов после половины попыток
+        expand_old_attempt_angle += int((90-angle_degrees) * (attempt_expansion-0.5) * 2)
+
+    angle_radians = np.radians(expand_old_attempt_angle * direction_sign)
 
     # Находим случайную ось, перпендикулярную текущему вектору
     rand_vec = np.random.randn(3)
     axis = np.cross(v, rand_vec)
-    if np.linalg.norm(axis) == 0:
+    while np.linalg.norm(axis) == 0:
         rand_vec = np.random.randn(3)
         axis = np.cross(v, rand_vec)
+
     axis /= np.linalg.norm(axis)
 
     # Поворот по формуле Родрига
@@ -205,7 +211,6 @@ def is_intersection_with_last_cristae(point_last, point_new, i, i_radius, crista
                 last_cristae_one = last_cristae_two
     return False
 
-
 def return_point_on_cylinder(point_last, point_new, cylinder_radius, base_center_cylinder_point, presections_dir):
     p1 = point_last
     p2 = point_new
@@ -319,7 +324,9 @@ def continue_cristae_while_in_cylinder(cristae_frame_list,
         counter_attempt_coutinue = 0
         while intersection_status is True and counter_attempt_coutinue < max_number_of_attempt_coutinue:
             # do in while {
-            new_cristae_dir = rotate_vector_random_direction(target_cristae_dir, cristae_angle_deviation)
+            new_cristae_dir = rotate_vector_random_direction(target_cristae_dir,
+                                                             cristae_angle_deviation,
+                                                             counter_attempt_coutinue/max_number_of_attempt_coutinue)
             len_of_new_cristae_dir = np.linalg.norm(new_cristae_dir)
             new_cristae_dir = new_cristae_dir / len_of_new_cristae_dir * cristae_step
             new_cristae_pos = now_cristae_pos + new_cristae_dir
@@ -447,7 +454,7 @@ def delete_small_len_cristae(cristae_list:list, cristae_radius_list:list, minimu
 def create_tubular_cristae(frames,
                            list_of_section,
                            cristae_step,
-                           cristae_radius,
+                           cristae_radius_param,
                            cristae_gap,
                            cristae_angle_deviation = 45,
                            density_cristae = 0.5,
@@ -463,10 +470,10 @@ def create_tubular_cristae(frames,
     start_section = list_of_section[0]
     max_radius = start_section.max_radius - overlap_radius
 
-    if isinstance(cristae_radius, (int, np.integer, float, np.floating)):
-        mean_cristae_radius = cristae_radius
+    if isinstance(cristae_radius_param, (int, np.integer, float, np.floating)):
+        mean_cristae_radius = cristae_radius_param
     else:
-        mean_cristae_radius = (cristae_radius[0] + cristae_radius[1]) / 2
+        mean_cristae_radius = (cristae_radius_param[0] + cristae_radius_param[1]) / 2
 
     count_of_start_cristae = int(round((max_radius / (mean_cristae_radius+cristae_gap/2))**2 * density_cristae))
 
@@ -480,7 +487,7 @@ def create_tubular_cristae(frames,
         attempt_count = 0
         # do while
         x, y = generate_point_in_circle(max_radius)
-        use_cristae_radius = get_rand_int(cristae_radius)
+        use_cristae_radius = get_rand_int(cristae_radius_param)
 
         while (is_intersection_with_added_points(x, y,
                                                  first_list_on_plane,
@@ -490,7 +497,7 @@ def create_tubular_cristae(frames,
                 attempt_count < max_count_added_cristae:
 
             x, y = generate_point_in_circle(max_radius)
-            use_cristae_radius = get_rand_int(cristae_radius)
+            use_cristae_radius = get_rand_int(cristae_radius_param)
 
             attempt_count += 1
 
@@ -513,7 +520,8 @@ def create_tubular_cristae(frames,
     ########## INIT FILTER ###############################
 
     # Отсеить точки, что будут за куполом и часто будут пересекать оболочку несколько раз
-    target_dir = rotate_vector_random_direction(presections_dir, angle_by_frame_dir)
+    target_dir = rotate_vector_random_direction(presections_dir,
+                                                angle_by_frame_dir)
     filter_indexes = filter_point_indices_by_side(row_first_step_list_of_cristae, target_dir, frames[0])
     first_step_list_of_cristae = [[row_first_step_list_of_cristae[i]] for i in filter_indexes]
     first_step_list_of_radiuse_cristae = [row_first_step_list_of_radiuse_cristae[i] for i in filter_indexes]
@@ -554,12 +562,41 @@ def create_tubular_cristae(frames,
                                                         frames[0],
                                                         presections_dir)
 
-        # Если возникла ошибка, то удаляем из рассмотрения
+        # Если возникла ошибка, то удаляем из рассмотрения ############### вместо удаление попробовать прицепить к ближайшей
         if end_status is None or end_status == -1 or len(cr_pos) < 2:
             #print("delete_cristae")
-            first_step_list_of_cristae.pop(i-overlap_delete_index)
-            first_step_list_of_radiuse_cristae.pop(i-overlap_delete_index)
-            overlap_delete_index += 1
+
+            ############################################################## эксперимент
+            last_point_i = cr_pos[-1]
+
+            if last_point_i is None: ############################################################# старый блок
+                first_step_list_of_cristae.pop(i-overlap_delete_index)
+                first_step_list_of_radiuse_cristae.pop(i-overlap_delete_index)
+                overlap_delete_index += 1
+
+            else:                   ############################################################ экспериментальный блок
+                min_cristae_pos_list = []
+                min_cristae_val_list = []
+                for j in range(i):
+                    min_value = 1000
+                    min_point = None
+                    cr_pos_j = first_step_list_of_cristae[j]
+                    for point_j in cr_pos_j:
+                        dist_to_cr = np.linalg.norm(last_point_i - point_j)
+                        if dist_to_cr < min_value:
+                            min_value = dist_to_cr
+                            min_point = point_j
+                    if min_point is not None:
+                        min_cristae_pos_list.append(min_point)
+                        min_cristae_val_list.append(min_value)
+
+                closest_neighbor_crist_pos = min_cristae_pos_list[min_cristae_val_list.index(min(min_cristae_val_list))]
+                cr_pos.append(closest_neighbor_crist_pos)
+
+                list_of_cristae.append(cr_pos)
+                list_of_radiuse_cristae.append(cr_r)
+                ############################################################## эксперимент
+
         elif end_status == 2:
             to_continue_cristae_step.append(cr_pos)
             to_continue_cristae_radiuce_step.append(cr_r)
@@ -588,7 +625,7 @@ def create_tubular_cristae(frames,
     for k in range(count_of_section_cristae):
         # do {
 
-        new_radius = get_rand_int(cristae_radius)
+        new_radius = get_rand_int(cristae_radius_param)
         new_point = generate_point_on_half_cylinder(frames[0],
                                                     presections_dir,
                                                     max_radius,
@@ -601,7 +638,7 @@ def create_tubular_cristae(frames,
                                                   new_sections_radiuses,
                                                   cristae_gap) and attempt_count < max_count_added_cristae:
 
-            new_radius = get_rand_int(cristae_radius)
+            new_radius = get_rand_int(cristae_radius_param)
             new_point = generate_point_on_half_cylinder(frames[0],
                                                         presections_dir,
                                                         max_radius,
@@ -644,16 +681,45 @@ def create_tubular_cristae(frames,
                                                         frames[0],
                                                         presections_dir)
 
-        # Если возникла ошибка, то удаляем из рассмотрения
+        # Если возникла ошибка, то удаляем из рассмотрения ############### вместо удаление попробовать прицепить к ближайшей
         if end_status is None or end_status == -1 or len(cr_pos) < 2:
             # print("delete_cristae")
-            section_step_list_of_cristae.pop(i - overlap_delete_index)
-            section_step_list_of_radiuse_cristae.pop(i - overlap_delete_index)
 
-            union_first_cristae_section_list.pop(i - overlap_delete_index + overlap_section_index)
-            union_first_radius_section_list.pop(i - overlap_delete_index + overlap_section_index)
+            ############################################################## эксперимент
+            last_point_i = cr_pos[-1]
 
-            overlap_delete_index += 1
+            if last_point_i is None: ############################################################# старый блок
+                section_step_list_of_cristae.pop(i - overlap_delete_index)
+                section_step_list_of_radiuse_cristae.pop(i - overlap_delete_index)
+
+                union_first_cristae_section_list.pop(i - overlap_delete_index + overlap_section_index)
+                union_first_radius_section_list.pop(i - overlap_delete_index + overlap_section_index)
+
+                overlap_delete_index += 1
+            else:                   ############################################################ экспериментальный блок
+                min_cristae_pos_list = []
+                min_cristae_val_list = []
+                for j in range(i - overlap_delete_index + overlap_section_index):
+                    min_value = 1000
+                    min_point = None
+                    cr_pos_j = union_first_cristae_section_list[j]
+                    for point_j in cr_pos_j:
+                        #print(point_j, last_point_i)
+                        dist_to_cr = np.linalg.norm(last_point_i - point_j)
+                        if dist_to_cr < min_value:
+                            min_value = dist_to_cr
+                            min_point = point_j
+                    if min_point is not None:
+                        min_cristae_pos_list.append(min_point)
+                        min_cristae_val_list.append(min_value)
+
+                closest_neighbor_crist_pos = min_cristae_pos_list[min_cristae_val_list.index(min(min_cristae_val_list))]
+                cr_pos.append(closest_neighbor_crist_pos)
+
+                list_of_cristae.append(cr_pos)
+                list_of_radiuse_cristae.append(cr_r)
+                ############################################################## эксперимент
+
         elif end_status == 2:
             to_continue_cristae_step.append(cr_pos)
             to_continue_cristae_radiuce_step.append(cr_r)
@@ -693,7 +759,7 @@ def create_tubular_cristae(frames,
 
         for k in range(count_of_section_cristae):
             # do {
-            new_radius = get_rand_int(cristae_radius)
+            new_radius = get_rand_int(cristae_radius_param)
             new_point = generate_point_on_half_cylinder(frames[now_frame_i],
                                                         now_frame_dir,
                                                         section_radius,
@@ -705,7 +771,7 @@ def create_tubular_cristae(frames,
                                                       new_sections_points,
                                                       new_sections_radiuses,
                                                       cristae_gap) and attempt_count < max_count_added_cristae:
-                new_radius = get_rand_int(cristae_radius)
+                new_radius = get_rand_int(cristae_radius_param)
                 new_point = generate_point_on_half_cylinder(frames[now_frame_i],
                                                             now_frame_dir,
                                                             section_radius,
@@ -746,9 +812,38 @@ def create_tubular_cristae(frames,
             # Если возникла ошибка, то удаляем из рассмотрения
             if end_status is None or end_status == -1 or len(cr_pos) < 2:
                 # print("delete_cristae")
-                section_step_list_of_cristae.pop(i - overlap_delete_index)
-                section_step_list_of_radiuse_cristae.pop(i - overlap_delete_index)
-                overlap_delete_index += 1
+                ############################################################## эксперимент
+                last_point_i = cr_pos[-1]
+
+                if last_point_i is None: ############################################################# старый блок
+
+                    section_step_list_of_cristae.pop(i - overlap_delete_index)
+                    section_step_list_of_radiuse_cristae.pop(i - overlap_delete_index)
+                    overlap_delete_index += 1
+
+                else:                   ############################################################ экспериментальный блок
+                    min_cristae_pos_list = []
+                    min_cristae_val_list = []
+                    for j in range(i - overlap_delete_index):
+                        min_value = 1000
+                        min_point = None
+                        cr_pos_j = section_step_list_of_cristae[j]
+                        for point_j in cr_pos_j:
+                            dist_to_cr = np.linalg.norm(last_point_i - point_j)
+                            if dist_to_cr < min_value:
+                                min_value = dist_to_cr
+                                min_point = point_j
+                        if min_point is not None:
+                            min_cristae_pos_list.append(min_point)
+                            min_cristae_val_list.append(min_value)
+
+                    closest_neighbor_crist_pos = min_cristae_pos_list[min_cristae_val_list.index(min(min_cristae_val_list))]
+                    cr_pos.append(closest_neighbor_crist_pos)
+
+                    list_of_cristae.append(cr_pos)
+                    list_of_radiuse_cristae.append(cr_r)
+                    ############################################################## эксперимент
+
             elif end_status == 2:
                 to_continue_cristae_step.append(cr_pos)
                 to_continue_cristae_radiuce_step.append(cr_r)

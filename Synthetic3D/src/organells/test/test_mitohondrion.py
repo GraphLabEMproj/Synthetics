@@ -8,12 +8,13 @@ import cv2
 import numpy as np
 from Synthetic3D.src.utilities.view_data import view_vtk_3D_data
 from Synthetic3D.src.hard.drawing_and_filliing.draw_triangle import draw_voxel_triangle
+from Synthetic3D.src.hard.drawing_and_filliing.draw_line_3d import draw_line_3D
 
 from Synthetic3D.src.utilities.logging_config import clear_log_file
 
 def test_frame_mito():
     print("StartTestMitohondrionFrame")
-    test_data = np.zeros((512, 512, 1536, 3), dtype=np.uint8)
+    test_data = np.zeros((1536, 512, 512, 3), dtype=np.uint8)
 
     dict_params = {
         "mitohondrion": {
@@ -25,12 +26,11 @@ def test_frame_mito():
 
     mito = Mitohondrion(dict_params)
 
-    new_pos = Vector(256, 256, 256)
+    new_pos = Vector(256, 256, 768)
 
     print("Len of mito", mito.mito_len)
     print("Number of section:", mito.count_of_section)
 
-    print(mito.view_shell.vertex_list[1])
 
     vertex_counter = 0
     vertex_list = []
@@ -59,11 +59,17 @@ def test_frame_mito():
     print("len triangles_list", len(triangles_list))
     print("len vertex_list", len(vertex_list))
 
+    '''
     color = (255, 0, 0)
     for triangle in triangles_list:
         v1, v2, v3 = triangle.get_values_by_vertices_indexes_from_list(new_vertex_list)
         print(v1, v2, v3)
         draw_voxel_triangle(test_data, v1.position, v2.position, v3.position, color, 0)
+    '''
+    frames = mito.view_shell.get_frames()
+    for i in range(len(frames) - 1):
+        draw_line_3D(test_data, np.round(frames[i] + new_pos).astype(np.int64), np.round(frames[i+1] + new_pos).astype(np.int64), (255,0,0), 1)
+
 
     view_vtk_3D_data(test_data, new_vertex_list)
 
@@ -199,7 +205,7 @@ def test_Mitohondrion_BIG():
 
     dict_params = {
         "mitohondrion": {
-            "radius_of_section": 42,
+            "radius_of_section": 32,
             "len_of_mitohondrion": (384, 768),
             "membrane_thickness": 3,
             "membrane_color": (255, 20, 30),
@@ -270,3 +276,4 @@ if __name__ == "__main__":
     #    test_Mitohondrion_orientation()
 
     test_Mitohondrion()
+    #test_Mitohondrion_BIG()

@@ -20,7 +20,7 @@ def TestVesicle(test_data):
 
     print("ChangePosition")
     print(vesicle.view_shell.get_frames()[0])
-    vesicle.ChangePosition(Vector((127,127,40)))
+    vesicle.ChangePosition(Vector((127,147,60)))
     print(vesicle.view_shell.get_frames()[0])
 
     print("Rotate")
@@ -32,7 +32,7 @@ def TestVesicle(test_data):
     vesicle.Draw(test_data)
 
     vesicle2 = Vesicles(param)
-    vesicle2.SetPosition(Vector([127, 127, 80]))
+    vesicle2.SetPosition(Vector([127, 107, 60]))
     vesicle2.Draw(test_data)
 
 def TestVesicles(test_data):

@@ -44,6 +44,39 @@ def rotate_3d(point:Vector, angle:Vector):
 
     return Vector(x3, y3, z3)
 
+def get_rotate_matrix(angle:Vector):
+       # Перевод углов в радианы
+       rx = math.radians(angle[0])
+       ry = math.radians(angle[1])
+       rz = math.radians(angle[2])
+
+       # Матрица поворота вокруг оси X (для вектора-столбца)
+       Rx = np.array([
+           [1, 0, 0],
+           [0, math.cos(rx), -math.sin(rx)],
+           [0, math.sin(rx),  math.cos(rx)]
+       ])
+
+       # Матрица поворота вокруг оси Y
+       Ry = np.array([
+           [ math.cos(ry), 0, math.sin(ry)],
+           [0,             1, 0],
+           [-math.sin(ry), 0, math.cos(ry)]
+       ])
+
+       # Матрица поворота вокруг оси Z
+       Rz = np.array([
+           [ math.cos(rz), -math.sin(rz), 0],
+           [ math.sin(rz),  math.cos(rz), 0],
+           [0,              0,            1]
+       ])
+
+       # Суммарная матрица поворота: сначала Rx, затем Ry, затем Rz
+       # Для вектора-столбца v' = Rz * Ry * Rx * v
+       R = Rz @ Ry @ Rx
+       return R
+
+
 def rotate_around_point_3d(point:Vector, angle:Vector, turning_pos:Vector = Vector()):
     '''
     Поворачивает вестор в 3D пространстве на заданные углы по осям x, y, z.

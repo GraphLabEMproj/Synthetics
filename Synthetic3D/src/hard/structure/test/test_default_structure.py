@@ -41,10 +41,10 @@ def test_Section():
     vertices = section.contour_list + [Vertex(position, direction)]
 
     triangles = [
-        Triangle((0, 2, 4), (0, 0, 0)),
+        Triangle((0, 1, 4), (0, 0, 0)),
         Triangle((1, 2, 4), (0, 0, 0)),
-        Triangle((0, 3, 4), (0, 0, 0)),
-        Triangle((1, 3, 4), (0, 0, 0))
+        Triangle((2, 3, 4), (0, 0, 0)),
+        Triangle((3, 0, 4), (0, 0, 0))
     ]
 
     int_coords_list = get_int_coords_from_vertex_list(vertices)

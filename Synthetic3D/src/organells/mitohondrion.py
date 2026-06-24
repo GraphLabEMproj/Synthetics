@@ -1,23 +1,24 @@
 import numpy as np
 
-from Synthetic3D.src.hard.drawing_and_filliing.draw_triangle import draw_voxel_triangle
+#from Synthetic3D.src.hard.drawing_and_filliing.draw_triangle import draw_voxel_triangle
 from Synthetic3D.src.hard.structure.vertex import Vertex
 from Synthetic3D.src.hard.structure.edge import Edge
 from Synthetic3D.src.hard.structure.section import Section
-from Synthetic3D.src.hard.structure.vector import Vector, vector_to_int
+from Synthetic3D.src.hard.structure.vector import Vector #, vector_to_int
 from Synthetic3D.src.hard.vector_operation import random_dir_change
 from Synthetic3D.src.organells.abstract_organell import Organell
 from Synthetic3D.src.hard.split_curve import vector_sum_with_save_len
-from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check
+from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check, get_color_index_fun_by_param
 from Synthetic3D.src.utilities.check_of_params import check_param
 from Synthetic3D.src.hard.structure.shells import FrameShell, ThickShell
-from Synthetic3D.src.hard.split_and_partition import partition_of_triangle
+#from Synthetic3D.src.hard.split_and_partition import partition_of_triangle
 from Synthetic3D.src.hard.shell_expansion import shell_expansion
 
-from Synthetic3D.src.hard.drawing_and_filliing.draw_cylinder import draw_small_cylinder_with_filling, fill_small_capsule
+from Synthetic3D.src.hard.drawing_and_filliing.draw_cylinder import fill_small_capsule #, draw_small_cylinder_with_filling
 
-from Synthetic3D.src.hard.drawing_and_filliing.fill_closed_shell import fill_closed_shell, get_valid_shell_points
-from Synthetic3D.src.hard.structure.simple_tubular_cristae import create_tubular_cristae
+from Synthetic3D.src.hard.drawing_and_filliing.fill_closed_shell import fill_closed_shell, get_valid_shell_points, fill_closed_shell_range_color
+#from Synthetic3D.src.hard.structure.simple_tubular_cristae import create_tubular_cristae
+from Synthetic3D.src.hard.structure.simple_tubular_cristae_fast import create_tubular_cristae_fast
 
 
 
@@ -41,7 +42,7 @@ class Mitohondrion(Organell):
         warning_list = []
 
         warning_list+=check_param(self.params, "num_partition_of_triangles", 2)
-        warning_list+=check_param(self.params, "membrane_color", (255, 0, 0))
+        warning_list+=check_param(self.params, "mito_membrane_color", (255, 0, 0))
         warning_list+=check_param(self.params, "matrix_color", (0, 255, 0))
         warning_list+=check_param(self.params, "membrane_thickness", 2)
         warning_list+=check_param(self.params, "radius_of_section", 15)
@@ -222,11 +223,11 @@ class Mitohondrion(Organell):
 
     def _Create_tubular_cristae(self, shell):
         ################################################################################################################### PARAMS ######################
-        cristae_frame_list, cristae_radius_list = create_tubular_cristae(shell.get_frames(),
+        cristae_frame_list, cristae_radius_list = create_tubular_cristae_fast(shell.get_frames(),
                                                                          self.section_list,
                                                                          cristae_step=10,
-                                                                         cristae_radius=(2, 5),
-                                                                         cristae_gap=2,
+                                                                         cristae_radius_param=(2, 5),
+                                                                         cristae_gap=1,
                                                                          cristae_angle_deviation=30,
                                                                          density_cristae=0.25,
                                                                          max_count_added_cristae=1000,
@@ -238,16 +239,16 @@ class Mitohondrion(Organell):
 
     def DrawCristae(self, data, constraint_shell, frames):
         logger.draw("\t\tcreate cristae")
-        cristae_frame_list, cristae_radius_list = create_tubular_cristae(frames,
+        cristae_frame_list, cristae_radius_list = create_tubular_cristae_fast(frames,
                                                                          self.section_list,
                                                                          cristae_step=10,
-                                                                         cristae_radius=(3, 5),
-                                                                         cristae_gap=2,
+                                                                         cristae_radius_param=(2, 6),
+                                                                         cristae_gap=1,
                                                                          cristae_angle_deviation=30,
-                                                                         density_cristae=0.5,
+                                                                         density_cristae=0.80,
                                                                          max_count_added_cristae=1000,
                                                                          max_count_added_cristae_continue=1000,
-                                                                         angle_by_frame_dir=45,
+                                                                         angle_by_frame_dir=30,
                                                                          overlap_radius=self.params["membrane_thickness"])
 
         logger.draw("\t\tdraw cristae in copy data")
@@ -256,9 +257,6 @@ class Mitohondrion(Organell):
         fill_closed_shell(data=mask_shell_draw,
                           shell=constraint_shell,
                           color=1)
-
-        work_cristae_membrane_color = color_dim_check(choise_use_color_by_param(self.params["cristae_membrane_color"]), data.shape)
-        work_cristae_color = color_dim_check(choise_use_color_by_param(self.params["cristae_color"]), data.shape)
 
         for frame_of_crista, radiuce_cristae in zip(cristae_frame_list, cristae_radius_list):
             len_frame = len(frame_of_crista)
@@ -274,8 +272,13 @@ class Mitohondrion(Organell):
                                        start_cylinder,
                                        dir_cylinder,
                                        radiuce_cristae,
-                                       work_cristae_membrane_color)
+                                       color_dim_check(choise_use_color_by_param(self.params["cristae_membrane_color"]), data.shape))
 
+        for frame_of_crista, radiuce_cristae in zip(cristae_frame_list, cristae_radius_list):
+            len_frame = len(frame_of_crista)
+            if len_frame < 2:
+                continue
+            else:
                 # рисование внутренности
                 for i in range(len_frame - 1):
                     start_cylinder = frame_of_crista[i]
@@ -283,40 +286,49 @@ class Mitohondrion(Organell):
                     fill_small_capsule(data_draw,
                                        start_cylinder,
                                        dir_cylinder,
-                                       radiuce_cristae - self.params["cristae_thickness"],
-                                       work_cristae_color)
+                                       (radiuce_cristae - get_rand_int(self.params["cristae_thickness"]) - (radiuce_cristae//5)), # для самых больших ещё толще
+                                       color_dim_check(choise_use_color_by_param(self.params["cristae_color"]), data.shape))
+
 
         logger.draw("\t\tdraw cristae into data using shell mask")
         data[mask_shell_draw[:,:,:]==1] = data_draw[mask_shell_draw[:,:,:]==1]
 
 
-
-
     def Draw(self, data):
-        logger.draw("MITO DRAW DON'T IMPLEMENTATION")
+        #logger.draw("MITO DRAW DON'T IMPLEMENTATION")
         #self.view_shell.Partition_of_triangles_while_len_of_edge_triangle_more_then_value(2, data.shape)
         self.view_shell.transform_coords2int()
 
-        work_membrane_color = color_dim_check(choise_use_color_by_param(self.params["membrane_color"]), data.shape)
-        work_inner_matrix_color = color_dim_check(choise_use_color_by_param(self.params["matrix_color"]), data.shape)
-
         logger.draw("Start draw Mitohondrion")
         logger.draw("\tdraw outer")
-        fill_closed_shell(data=data,
-                          shell=self.view_shell.dict_of_shells["external"],
-                          color=work_membrane_color)
+        fill_closed_shell_range_color(data=data,
+                                      shell=self.view_shell.dict_of_shells["external"],
+                                      color_param=self.params["mito_membrane_color"])
 
         logger.draw("\tdraw inner")
-        fill_closed_shell(data=data,
-                          shell=self.view_shell.dict_of_shells["interior"],
-                          color=work_inner_matrix_color)
+        interior_color_param = self.params["matrix_color"]
+
+        get_fun_type = get_color_index_fun_by_param(interior_color_param)
+        if get_fun_type == 2:################################################################### задание основного и цвета в диапазоне для повышения разнообразия
+            main_interior_color = choise_use_color_by_param(interior_color_param)
+            min_range = interior_color_param[0] - interior_color_param[1]
+            max_range = interior_color_param[0] + interior_color_param[1]
+            change_3sigma = min(abs(main_interior_color - min_range),
+                                abs(max_range - main_interior_color))
+            use_interior_color_param = (main_interior_color, change_3sigma)
+        else:
+            use_interior_color_param = interior_color_param
+
+        fill_closed_shell_range_color(data=data,
+                                      shell=self.view_shell.dict_of_shells["interior"],
+                                      color_param=use_interior_color_param)
 
         logger.draw("\tdraw cristae")
         self.DrawCristae(data, self.view_shell.dict_of_shells["interior"], self.view_shell.get_frames())
         logger.draw("End draw Mitohondrion")
 
     def DrawMask(self, mask_data, color=None):
-        logger.draw("MITO MASK DON'T IMPLEMENTATION")
+        #logger.draw("MITO MASK DON'T IMPLEMENTATION")
 
         #self.view_shell.Partition_of_triangles_while_len_of_edge_triangle_more_then_value(2, mask_data.shape)
         self.view_shell.transform_coords2int()
@@ -331,7 +343,7 @@ class Mitohondrion(Organell):
         logger.draw("End draw mask Mitohondrion")
 
     def DrawArea(self, cell_data, color) -> list[Vector]:
-        logger.draw("MITO DRAWAREA IS BAD IMPLEMENTATION")
+        #logger.draw("MITO DRAWAREA IS BAD IMPLEMENTATION")
         #self.Partition_of_triangles(4)
 
         #self.view_shell.Partition_of_triangles_while_len_of_edge_triangle_more_then_value(2, cell_data.shape)
@@ -343,7 +355,6 @@ class Mitohondrion(Organell):
                           shell=self.view_shell.dict_of_shells["external"],
                           color=color)
         valid_shell_points = get_valid_shell_points(cell_data, self.view_shell.dict_of_shells["external"])
-        logger.draw(valid_shell_points.shape)
+        logger.draw(f"\tCreated {valid_shell_points.shape[0]} points to start expansion")
         logger.draw("End draw area Mitohondrion")
-
         return valid_shell_points
