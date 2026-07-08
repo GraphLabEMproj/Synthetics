@@ -45,8 +45,7 @@ class Organell(abc.ABC):
 
         self.params = {"color": (255, 0, 0),  # красный
                        "color_inner": (0, 255, 0),
-                       "mask_color": 255,
-                       "thickness":  0}
+                       "mask_color": 255}
 
         self.num_partition_of_triangles = 0
         self.warnings = []

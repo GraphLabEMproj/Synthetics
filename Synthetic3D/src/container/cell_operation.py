@@ -11,7 +11,9 @@ def ExpansionOfPoint26Dir_v3(data: np.ndarray,
                              position: np.ndarray,
                              index: int,
                              index_kernel: np.ndarray,
-                             probability_kernel: np.ndarray):
+                             probability_kernel: np.ndarray,
+                             #list_of_boarders: list = []
+                             ):
     d, h, w = data.shape
     p_x, p_y, p_z = position
     next_iteration_work_points = []
@@ -51,6 +53,7 @@ def ExpansionOfPoint26Dir_v3(data: np.ndarray,
         else:
             if data[p_z, p_y, p_x] != -index:
                 data[p_z, p_y, p_x] = -index
+                #list_of_boarders.append((p_z, p_y, p_x))
             else:
                 continue
 
@@ -59,7 +62,12 @@ def ExpansionOfPoint26Dir_v3(data: np.ndarray,
 
     return next_iteration_work_points
 
-def ExpansionOfPoint6Dir(data, position: Vector | np.ndarray, index: int, probability=None):
+def ExpansionOfPoint6Dir(data,
+                         position: Vector | np.ndarray,
+                         index: int,
+                         probability=None,
+                         #list_of_boarders: list = []
+                         ):
     assert len(data.shape) == 3 or data.shape[3] == 1, "Данные для алгоритма разрастания должны иметь 3 оси и 1 канал."
     d, h, w = data.shape
     p_x, p_y, p_z = position
@@ -86,6 +94,7 @@ def ExpansionOfPoint6Dir(data, position: Vector | np.ndarray, index: int, probab
         else:
             if data[p_z, p_y, p_x] != -index:
                 data[p_z, p_y, p_x] = -index
+                #list_of_boarders.append((p_z, p_y, p_x))
             return False
 
     # z check
@@ -223,10 +232,69 @@ def shift_boundary_with_shell(cell_fields, label, distance):
     # Оболочка – всё, что было в клетке и теперь отсутствует
     shell_mask = old_cell_mask & ~new_cell_mask
 
-    # Утолщенная оболочка – часть границы клетки
     cell_fields[shell_mask == True] = -label
 
-    return cell_fields, shell_mask
+    return shell_mask
+
+def triple_shift_boundary_with_shell(cell_fields, label, distance1, distance2, distance3):
+    """
+    Сдвигает ВСЮ границу клетки внутрь на `distance1`, `distance2` и `distance3` и возвращает
+    3 маски «оболочки», появившейся между старой и новой границами.
+    Изменяет `cell_fields` на месте. Внутренние области помечаются как граница, поскольку в этой области лучше ничего не делать
+
+    Параметры
+    ----------
+    cell_fields : np.ndarray (3D, int32)
+    label : int (>0)
+    distance1 : float
+    distance2 : float
+    distance3 : float
+
+    Возвращает
+    -------
+    cell_fields : обновлённый массив
+    shell_mask : np.ndarray (3D, bool)
+        True в тех вокселях, которые исчезли из клетки (были внутри,
+        но стали фоном).
+    """
+    ########## MASK1 ############
+    # Запоминаем маску старой клетки
+    old_cell_mask = np.abs(cell_fields) == label
+
+    # Сдвигаем всю границу (shift_mask=None)
+    shift_boundary(cell_fields, label, distance1, shift_mask=None)
+
+    # Маска новой клетки
+    new_cell_mask1 = np.abs(cell_fields) == label
+
+    ########## MASK2 ############
+    # Оболочка – всё, что было в клетке и теперь отсутствует
+    shell_mask1 = old_cell_mask & ~new_cell_mask1
+
+    # Сдвигаем всю границу (shift_mask=None)
+    shift_boundary(cell_fields, label, distance2, shift_mask=None)
+
+    # Маска новой клетки
+    new_cell_mask2 = np.abs(cell_fields) == label
+
+    # Оболочка – всё, что было в клетке и теперь отсутствует
+    shell_mask2 = new_cell_mask1 & ~new_cell_mask2
+
+    ########## MASK3 ############
+    # Сдвигаем всю границу (shift_mask=None)
+    shift_boundary(cell_fields, label, distance3, shift_mask=None)
+
+    # Маска новой клетки
+    new_cell_mask3 = np.abs(cell_fields) == label
+
+    # Оболочка – всё, что было в клетке и теперь отсутствует
+    shell_mask3 = new_cell_mask2 & ~new_cell_mask3
+
+    cell_fields[shell_mask1 == True] = -label
+    cell_fields[shell_mask2 == True] = -label
+    cell_fields[shell_mask3 == True] = -label
+
+    return shell_mask1, shell_mask2, shell_mask3
 
 
 def generate_spheres_mask(shape, density, radius_range):

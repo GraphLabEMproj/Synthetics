@@ -9,7 +9,7 @@ def TestVesicle(test_data):
 
     param = {
         "vesicles": {
-            "number_of_vesicles": 1,
+            "vesicle_packing_fraction": 0,
             "radius_of_vesicle": 20
         }
     }
@@ -36,6 +36,7 @@ def TestVesicle(test_data):
     vesicle2.Draw(test_data)
 
 def TestVesicles(test_data):
+
     cloud_vesicle = Vesicles()
     print(f"Warnings: {cloud_vesicle.warnings}")
 

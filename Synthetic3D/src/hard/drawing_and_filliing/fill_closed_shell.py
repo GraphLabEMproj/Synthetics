@@ -146,19 +146,20 @@ def fill_closed_shell_range_color(data, shell, color_param):
         return data
 
     if len(color_param) == 2:
-        mean, scale = color_param
+        mean, tree_sigma = color_param
+        target_std = tree_sigma/3
 
         if data.ndim == 3:
             # Одноканальное изображение – генерируем скалярные значения
-            #colors = np.random.normal(mean, scale, size=len(valid_indices))
-            #colors = np.random.uniform(mean-scale, mean+scale, size=len(valid_indices))
+            #colors = np.random.normal(mean, target_std, size=len(valid_indices))
+            #colors = np.random.uniform(mean-target_std, mean+target_std, size=len(valid_indices))
 
             colors = np.random.normal(size=len(valid_indices))
         elif data.ndim == 4:
             # Многоканальное изображение – генерируем вектор для каждого пикселя
             C = data.shape[3]
-            #colors = np.random.normal(mean, scale, size=(len(valid_indices), C))
-            #colors = np.random.uniform(mean-scale, mean+scale, size=(len(valid_indices), C))
+            #colors = np.random.normal(mean, target_std, size=(len(valid_indices), C))
+            #colors = np.random.uniform(mean-target_std, mean+target_std, size=(len(valid_indices), C))
 
             colors = np.random.normal(size=(len(valid_indices), C))
         else:
@@ -170,7 +171,7 @@ def fill_closed_shell_range_color(data, shell, color_param):
         smoothed = gaussian_filter(colors, radius=5, sigma=10)
         # Масштабируем до нужного sigma и добавляем среднее
         actual_std = np.std(smoothed)
-        colors = (smoothed / actual_std) * scale + mean
+        colors = (smoothed / actual_std) * target_std + mean
 
         # Обрезаем до [0, 255]
         colors = np.clip(np.round(colors), 0, 255)

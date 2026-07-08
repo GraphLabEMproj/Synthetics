@@ -9,7 +9,7 @@ from Synthetic3D.src.hard.vector_operation import random_dir_change
 from Synthetic3D.src.organells.abstract_organell import Organell
 from Synthetic3D.src.hard.split_curve import vector_sum_with_save_len
 from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check, get_color_index_fun_by_param
-from Synthetic3D.src.utilities.check_of_params import check_param
+from Synthetic3D.src.utilities.check_of_params import check_param, update_param
 from Synthetic3D.src.hard.structure.shells import FrameShell, ThickShell
 #from Synthetic3D.src.hard.split_and_partition import partition_of_triangle
 from Synthetic3D.src.hard.shell_expansion import shell_expansion
@@ -34,6 +34,8 @@ class Mitohondrion(Organell):
             self.comment = "Default mitochondrion"
         self.warnings = self._check_and_set_default_params()
 
+        self.cristae = None
+
         ######################################################################################################################## PARAM !
         self.num_partition_of_triangles = self.params["num_partition_of_triangles"]
         self.warnings += self._Create()
@@ -50,6 +52,7 @@ class Mitohondrion(Organell):
         warning_list+=check_param(self.params, "len_of_mitohondrion", (150, 250))
 
 
+        warning_list+=check_param(self.params, "cristae_radius", (2, 6))
         warning_list+=check_param(self.params, "cristae_membrane_color", (0, 0, 255))
         warning_list+=check_param(self.params, "cristae_color", (0, 255, 255))
         warning_list+=check_param(self.params, "cristae_thickness", 2)
@@ -62,6 +65,14 @@ class Mitohondrion(Organell):
             warning_list = ["Warning Mitohondrion!"] + warning_list
         return warning_list
 
+    def update_draw_config(self, config):
+        new_params = config.get("mitohondrion", None)
+        if new_params is not None:
+            update_param(self.params, new_params, "mito_membrane_color")
+            update_param(self.params, new_params, "matrix_color")
+            update_param(self.params, new_params, "cristae_membrane_color")
+            update_param(self.params, new_params, "cristae_color")
+            update_param(self.params, new_params, "cristae_thickness")
 
     @staticmethod
     def make_TrickShell_from_shell_and_thickness(shell:FrameShell, thickness:float):
@@ -77,6 +88,10 @@ class Mitohondrion(Organell):
 
     def _Create(self): # генерирует форму
         shell = self._Create_Shell()
+
+        if isinstance(self.params["membrane_thickness"], (list, tuple)):
+            self.params["membrane_thickness"] = get_rand_int(self.params["membrane_thickness"])
+
         self.shell = self.make_TrickShell_from_shell_and_thickness(shell, self.params["membrane_thickness"])
         self.shell.Partition_of_triangles(self.num_partition_of_triangles)
         self._CalculateViewData()
@@ -226,7 +241,7 @@ class Mitohondrion(Organell):
         cristae_frame_list, cristae_radius_list = create_tubular_cristae_fast(shell.get_frames(),
                                                                          self.section_list,
                                                                          cristae_step=10,
-                                                                         cristae_radius_param=(2, 5),
+                                                                         cristae_radius_param=self.params["cristae_radius"],
                                                                          cristae_gap=1,
                                                                          cristae_angle_deviation=30,
                                                                          density_cristae=0.25,
@@ -239,17 +254,20 @@ class Mitohondrion(Organell):
 
     def DrawCristae(self, data, constraint_shell, frames):
         logger.draw("\t\tcreate cristae")
-        cristae_frame_list, cristae_radius_list = create_tubular_cristae_fast(frames,
-                                                                         self.section_list,
-                                                                         cristae_step=10,
-                                                                         cristae_radius_param=(2, 6),
-                                                                         cristae_gap=1,
-                                                                         cristae_angle_deviation=30,
-                                                                         density_cristae=0.80,
-                                                                         max_count_added_cristae=1000,
-                                                                         max_count_added_cristae_continue=1000,
-                                                                         angle_by_frame_dir=30,
-                                                                         overlap_radius=self.params["membrane_thickness"])
+
+        if self.cristae is None:
+            cristae_frame_list, cristae_radius_list = create_tubular_cristae_fast(frames,
+                                                                                  self.section_list,
+                                                                                  cristae_step=10,
+                                                                                  cristae_radius_param=self.params["cristae_radius"],
+                                                                                  cristae_gap=1,
+                                                                                  cristae_angle_deviation=30,
+                                                                                  density_cristae=0.80,
+                                                                                  max_count_added_cristae=1000,
+                                                                                  max_count_added_cristae_continue=1000,
+                                                                                  angle_by_frame_dir=30,
+                                                                                  overlap_radius=self.params["membrane_thickness"])
+            self.cristae = (cristae_frame_list, cristae_radius_list)
 
         logger.draw("\t\tdraw cristae in copy data")
         data_draw = data.copy()
@@ -258,7 +276,7 @@ class Mitohondrion(Organell):
                           shell=constraint_shell,
                           color=1)
 
-        for frame_of_crista, radiuce_cristae in zip(cristae_frame_list, cristae_radius_list):
+        for frame_of_crista, radiuce_cristae in zip(*self.cristae):
             len_frame = len(frame_of_crista)
             if len_frame < 2:
                 continue
@@ -274,7 +292,7 @@ class Mitohondrion(Organell):
                                        radiuce_cristae,
                                        color_dim_check(choise_use_color_by_param(self.params["cristae_membrane_color"]), data.shape))
 
-        for frame_of_crista, radiuce_cristae in zip(cristae_frame_list, cristae_radius_list):
+        for frame_of_crista, radiuce_cristae in zip(*self.cristae):
             len_frame = len(frame_of_crista)
             if len_frame < 2:
                 continue
@@ -283,6 +301,7 @@ class Mitohondrion(Organell):
                 for i in range(len_frame - 1):
                     start_cylinder = frame_of_crista[i]
                     dir_cylinder = frame_of_crista[i + 1] - start_cylinder
+
                     fill_small_capsule(data_draw,
                                        start_cylinder,
                                        dir_cylinder,
@@ -301,15 +320,26 @@ class Mitohondrion(Organell):
 
         logger.draw("Start draw Mitohondrion")
         logger.draw("\tdraw outer")
+        membrane_color_param = self.params["mito_membrane_color"]
+
+        if get_color_index_fun_by_param(membrane_color_param) == 2:################################################################### задание основного и цвета в диапазоне для повышения разнообразия
+            main_membrane_color = choise_use_color_by_param(membrane_color_param)
+            min_range = membrane_color_param[0] - membrane_color_param[1]
+            max_range = membrane_color_param[0] + membrane_color_param[1]
+            change_3sigma = min(abs(main_membrane_color - min_range),
+                                abs(max_range - main_membrane_color))
+            use_membrane_color_param = (main_membrane_color, change_3sigma)
+        else:
+            use_membrane_color_param = membrane_color_param
+
         fill_closed_shell_range_color(data=data,
                                       shell=self.view_shell.dict_of_shells["external"],
-                                      color_param=self.params["mito_membrane_color"])
+                                      color_param=use_membrane_color_param)
 
         logger.draw("\tdraw inner")
         interior_color_param = self.params["matrix_color"]
 
-        get_fun_type = get_color_index_fun_by_param(interior_color_param)
-        if get_fun_type == 2:################################################################### задание основного и цвета в диапазоне для повышения разнообразия
+        if get_color_index_fun_by_param(interior_color_param) == 2:################################################################### задание основного и цвета в диапазоне для повышения разнообразия
             main_interior_color = choise_use_color_by_param(interior_color_param)
             min_range = interior_color_param[0] - interior_color_param[1]
             max_range = interior_color_param[0] + interior_color_param[1]

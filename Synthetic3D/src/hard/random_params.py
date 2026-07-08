@@ -13,6 +13,26 @@ def get_rand_int(r: int|tuple[int,int]) -> int:
     else:
         return np.random.randint(r[0], r[1] + 1)
 
+def get_rand_float(r: float|tuple[float,float]) -> float:
+    if isinstance(r, (float, int)):
+        return r
+    else:
+        return np.random.uniform(r[0], r[1])
+
+
+def random_unit_vector() -> np.ndarray:
+    """
+    Генерирует случайный единичный вектор в трёхмерном пространстве.
+    Распределение равномерное на сфере.
+    """
+    # Метод сферических координат (равномерно по телесному углу)
+    theta = np.random.uniform(0, 2 * np.pi)          # азимутальный угол
+    phi = np.arccos(2 * np.random.uniform() - 1)     # полярный угол (cos(phi) равномерен)
+    return np.array([
+        np.sin(phi) * np.cos(theta),
+        np.sin(phi) * np.sin(theta),
+        np.cos(phi)
+    ])
 
 def get_bool_rand_probability(probability:float) -> bool:
     """
@@ -39,7 +59,7 @@ def get_random_int_value_with_gaussian_distribution(mean, scatter_range):
     :return: целое число
     """
 
-    return int(np.random.normal(mean, scatter_range)+0.495)
+    return int(np.random.normal(mean, scatter_range/3)+0.495)
 
 
 def get_random_color_with_gaussian_distribution(mean, scatter_range):

@@ -4,7 +4,7 @@ from Synthetic3D.src.organells.vesicles import Vesicles
 from Synthetic3D.src.organells.mitohondrion import Mitohondrion
 from Synthetic3D.src.hard.dictance import distance_point_to_segment, min_distance_between_segments
 
-# Константы расширения нужны чтобы корректно работал алгоритм разрастания
+# Константы расширения нужны чтобы корректно работал алгоритм разрастания. Большие значения нужны чтобы мембраны не налезали на органеллы
 EXPECTITION_TWO_EMPTYORGANELLS = 10
 EXPECTITION_EMPTYORGANELLS_AND_VESICLES = 10
 EXPECTITION_TWO_VESICLES = 10
@@ -14,7 +14,7 @@ EXPECTITION_TWO_MITOHONDRIA = 20
 
 
 def CheckRoughDistanceEstimateIntersectionWithVesicles(pos, gap_dist, vesicle: Vesicles):
-    if np.linalg.norm(pos - vesicle.position) < gap_dist + vesicle.max_cloud_radius + vesicle.params["thickness"] + vesicle.max_radius:
+    if np.linalg.norm(pos - vesicle.position) < gap_dist + vesicle.max_cloud_radius + vesicle.max_thickness + vesicle.max_radius:
         return True
     else:
         return False
@@ -31,7 +31,7 @@ def CheckIntersectionEmptyOrganelleAndVesicles(org1: EmptyOrganelle, org2: Vesic
     pos1 = org1.position
     if CheckRoughDistanceEstimateIntersectionWithVesicles(pos1, org1.radius+EXPECTITION_EMPTYORGANELLS_AND_VESICLES, org2):
         for i, pos2 in enumerate(org2.view_shell.get_frames()):
-            radius_ves = org2.radius_list[i] + org2.params["thickness"]
+            radius_ves = org2.max_radius + org2.max_thickness
             if np.linalg.norm(pos1 - pos2) < org1.radius + radius_ves + EXPECTITION_EMPTYORGANELLS_AND_VESICLES:
                 return True
     return False
@@ -39,8 +39,8 @@ def CheckIntersectionEmptyOrganelleAndVesicles(org1: EmptyOrganelle, org2: Vesic
 def CheckRoughDistanceEstimateIntersectionTwoVesicles(org1: Vesicles, org2: Vesicles):
     if np.linalg.norm(org1.position - org2.position) <\
         org1.max_cloud_radius + org2.max_cloud_radius +\
-        org1.params["thickness"]     + org2.params["thickness"] +\
-        org1.max_radius     + org2.max_radius+\
+        org1.max_thickness + org2.max_thickness +\
+        org1.max_radius  + org2.max_radius+\
         EXPECTITION_TWO_VESICLES:
         return True
     else:
@@ -49,9 +49,9 @@ def CheckRoughDistanceEstimateIntersectionTwoVesicles(org1: Vesicles, org2: Vesi
 def CheckIntersectionTwoVesicles(org1: Vesicles, org2: Vesicles):
     if CheckRoughDistanceEstimateIntersectionTwoVesicles(org1, org2):
         for i, pos1 in enumerate(org1.view_shell.get_frames()):
-            radius_ves1 = org1.radius_list[i] + org1.params["thickness"]
+            radius_ves1 = org1.max_radius + org1.max_thickness
             for j, pos2 in enumerate(org2.view_shell.get_frames()):
-                radius_ves2 = org2.radius_list[j] + org2.params["thickness"]
+                radius_ves2 = org2.max_radius + org2.max_thickness
                 if np.linalg.norm(pos1 - pos2) < radius_ves1 + radius_ves2 + EXPECTITION_TWO_VESICLES:
                     return True
     return False
@@ -63,14 +63,14 @@ def CheckIntersectionMitohondriaAndEmptyOrganelle(org1: Mitohondrion, org2: Empt
 
     # Проверка удаленности от первой внутренней точки фрейма
     dist_mito_from_start_to_frame = np.linalg.norm(org1.view_shell.get_frame(0) - org1.view_shell.get_frame(1)) + \
-                                    org1.params["thickness"]
+                                    org1.params["membrane_thickness"]
     if np.linalg.norm(pos_empty - org1.view_shell.get_frame(1)) < \
             radius_empty + dist_mito_from_start_to_frame + EXPECTITION_EMPTYORGANELLS_AND_MITOHONDRION:
         return True
     else:
         # Проверка удаленности от последней внутренней точки фрейма
         dist_mito_from_end_to_frame = np.linalg.norm(org1.view_shell.get_frame(-1) - org1.view_shell.get_frame(-2)) + \
-                                      org1.params["thickness"]
+                                      org1.params["membrane_thickness"]
 
         if np.linalg.norm(pos_empty - org1.view_shell.get_frame(-2)) < \
                 radius_empty + dist_mito_from_end_to_frame + EXPECTITION_EMPTYORGANELLS_AND_MITOHONDRION:
@@ -85,7 +85,7 @@ def CheckIntersectionMitohondriaAndEmptyOrganelle(org1: Mitohondrion, org2: Empt
 
                 max_radius_beetween_sections = max(org1.section_max_radius_list[i],
                                                    org1.section_max_radius_list[i + 1]) + \
-                                               org1.params["thickness"]
+                                               org1.params["membrane_thickness"]
 
                 if distance_point_to_segment(pos_empty, start_point_frame_segment, end_point_frame_segment) < \
                         max_radius_beetween_sections + radius_empty + EXPECTITION_EMPTYORGANELLS_AND_MITOHONDRION:
@@ -101,8 +101,8 @@ def CheckIntersectionMitohondriaAndVesicles(org1: Mitohondrion, org2: Vesicles):
                                     org1.params["membrane_thickness"] + EXPECTITION_VESICLES_AND_MITOHONDRION
 
     if CheckRoughDistanceEstimateIntersectionWithVesicles(org1.view_shell.get_frame(1), dist_mito_from_start_to_frame, org2):
+        radius_ves = org2.max_radius + org2.max_thickness
         for i, pos_ves in enumerate(org2.view_shell.get_frames()):
-            radius_ves = org2.radius_list[i] + org2.params["thickness"]
             if np.linalg.norm(pos_ves - org1.view_shell.get_frame(1)) < \
                     radius_ves + dist_mito_from_start_to_frame:
                 return True
@@ -110,11 +110,11 @@ def CheckIntersectionMitohondriaAndVesicles(org1: Mitohondrion, org2: Vesicles):
     # Проверка удаленности от последней внутренней точки фрейма
     dist_mito_from_end_to_frame = np.linalg.norm(org1.view_shell.get_frame(-1) - org1.view_shell.get_frame(-2)) + \
                                       org1.params["membrane_thickness"] + EXPECTITION_VESICLES_AND_MITOHONDRION
-    if CheckRoughDistanceEstimateIntersectionWithVesicles(org1.view_shell.get_frame(-2), dist_mito_from_end_to_frame, org2):
-        for i, pos_ves in enumerate(org2.view_shell.get_frames()):
-            radius_ves = org2.radius_list[i] + org2.params["thickness"]
 
-            if np.linalg.norm(radius_ves - org1.view_shell.get_frame(-2)) < \
+    if CheckRoughDistanceEstimateIntersectionWithVesicles(org1.view_shell.get_frame(-2), dist_mito_from_end_to_frame, org2):
+        radius_ves = org2.max_radius + org2.max_thickness
+        for i, pos_ves in enumerate(org2.view_shell.get_frames()):
+            if np.linalg.norm(pos_ves - org1.view_shell.get_frame(-2)) < \
                     radius_ves + dist_mito_from_end_to_frame:
                 return True
 
@@ -130,11 +130,10 @@ def CheckIntersectionMitohondriaAndVesicles(org1: Mitohondrion, org2: Vesicles):
                                        org1.params["membrane_thickness"] + EXPECTITION_VESICLES_AND_MITOHONDRION
 
         if distance_point_to_segment(org2.position, start_point_frame_segment, end_point_frame_segment) <\
-            max_radius_beetween_sections + org2.max_cloud_radius + org2.params["thickness"] + org2.max_radius:
+            max_radius_beetween_sections + org2.max_cloud_radius + org2.max_thickness + org2.max_radius:
 
+            radius_ves = org2.max_radius + org2.max_thickness
             for i, pos_ves in enumerate(org2.view_shell.get_frames()):
-                radius_ves = org2.radius_list[i] + org2.params["thickness"]
-
                 if distance_point_to_segment(pos_ves, start_point_frame_segment, end_point_frame_segment) < \
                         max_radius_beetween_sections + radius_ves:
                     return True

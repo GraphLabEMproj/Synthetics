@@ -1,27 +1,43 @@
 import datetime
 import json
 import os.path
-
 import numpy as np
 import random
+
+from tqdm import tqdm
+
 from Synthetic3D.src.organells.empty_organelle import EmptyOrganelle
 from Synthetic3D.src.organells.vesicles import Vesicles
 from Synthetic3D.src.organells.mitohondrion import Mitohondrion
 from Synthetic3D.src.container.cell import Cell
-from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check, get_color_index_fun_by_param
+from Synthetic3D.src.container.axon import Axon
+from Synthetic3D.src.container.psd import PSD
+from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check, get_color_index_fun_by_param, get_bool_rand_probability
 from Synthetic3D.src.hard.structure.vector import Vector
 from Synthetic3D.src.container.inrersections_rules import CheckTwoOrganells
 
 from Synthetic3D.src.hard.noise_and_blur import add_internal_structures, CreatePossionNoise, AddGaussianBlur
 from Synthetic3D.src.hard.drawing_and_filliing.draw_data_by_mask import draw_data_by_mask_and_random_value
 
-from Synthetic3D.src.utilities.check_of_params import check_param
+from Synthetic3D.src.utilities.check_of_params import check_param, update_param
 from Synthetic3D.src.hard.write_data import write_dataset, write_datamask
 
 from Synthetic3D.src.utilities.logging_config import logger, set_log_file_path, log_execution
 from Synthetic3D.src.utilities.check_to_json import to_json_format
 
 from Synthetic3D.src.container.cell_operation import generate_spheres_mask, shift_boundary_with_shell, shift_boundary
+
+import time
+
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', empty=' ', print_end='\n'):
+    """
+    Выводит прогресс-бар в консоль с новой строки.
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + empty * (length - filled_length)
+    print(f'\r{prefix} {iteration} of {total} |{bar}| {percent}% {suffix}', end=print_end, flush=True)
+
 
 class MainField:
     def __init__(self, param:dict={}):
@@ -44,17 +60,21 @@ class MainField:
         warning_list+=check_param(self.params, "channel_num", 3)
         warning_list+=check_param(self.params, "dict_of_organells",  {"Mitohondrion":0,
                                                                       "Vesicles": 1,
-                                                                      "Membranes": 2})
+                                                                      "Membranes": 2,
+                                                                      "Axon": 3,
+                                                                      "PSD": 4})
 
         warning_list += check_param(self.params, "max_count_of_organells", {"Mitohondrion": 4,
                                                                             "Vesicles": 3,
                                                                             "EmptyCell": 5,
-                                                                            "AxonShell": 1})
+                                                                            "Axon": 1,
+                                                                            "PSD": 4})
 
-        warning_list+=check_param(self.params, "membrane_color", (0, 127, 0))
-        warning_list += check_param(self.params, "distance_cell_shift_range", (1,2))
+        warning_list+=check_param(self.params, "cell", {"membrane_thickness": 2,
+                                                        "distance_cell_shift_range": (1,2),
+                                                        "membrane_color": (0, 127, 0),
+                                                        "membrane_mask_color": 255})
 
-        warning_list+=check_param(self.params, "membrane_mask_color", 255)
         warning_list+=check_param(self.params, "poisson_noise", 15)
         warning_list+=check_param(self.params, "max_count_attempt_for_adding_cell", 10000)
 
@@ -65,9 +85,6 @@ class MainField:
                                                                "gaussian_radius":3,
                                                                "gaussian_sigma": 5
                                                                })
-
-        warning_list += check_param(self.params, "axon_membrane_size", (5,10))
-        warning_list += check_param(self.params, "axon_color_membrane_param", (64, 10))
 
         warning_list += check_param(self.params, "generation_offset_range_from_the_edge", (0, 0, 0))
         warning_list += check_param(self.params, "generation_rotation_range", ((0, 359),(0, 359),(0, 359)))
@@ -162,13 +179,29 @@ class MainField:
         data = np.clip(data, 0, 255)
         self.data = data.astype(np.uint8)
 
-    def ExpansionOfRegionsIter(self, arr_of_num_work_points): ############################################################## вынесено чтобы смотреть между итерациями
+    def ExpansionOfRegionsIter(self, arr_of_num_work_points, early_stop_cell_idexes_and_count=None): ############################################################## вынесено чтобы смотреть между итерациями
         repit_flag = False
-        random.shuffle(self.cell_list)  # перемешивание для минимизации приоритетоности
-        for cell in self.cell_list:
-            if cell.ExpansionOfRegion(self.cell_fields):
-                repit_flag = True
-                arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
+
+        indexes_cell_list = [i for i in range(len(self.cell_list))]
+        random.shuffle(indexes_cell_list)  # перемешивание для минимизации приоритетоности
+
+        for i in indexes_cell_list:
+            cell = self.cell_list[i]
+            cell_index = cell.index
+
+            if early_stop_cell_idexes_and_count is not None and\
+               cell_index in early_stop_cell_idexes_and_count.keys():
+                    if early_stop_cell_idexes_and_count[cell_index] > 0:
+                        if cell.ExpansionOfRegion(self.cell_fields):
+                            repit_flag = True
+                            arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
+                        early_stop_cell_idexes_and_count[cell_index] -= 1
+                    else:
+                        continue
+            else:
+                if cell.ExpansionOfRegion(self.cell_fields):
+                    repit_flag = True
+                    arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
         return repit_flag
 
     @log_execution(level="main")
@@ -181,39 +214,102 @@ class MainField:
         iteration_counter = 0
         summ_of_work_point = 0
 
-        arr_of_num_work_points = np.zeros(len(self.cell_list))
-        while repit_flag:
-            repit_flag = self.ExpansionOfRegionsIter(arr_of_num_work_points)
+        probability_earli_stop_of_vesicles = 0.5                                                                                                # EXPERIMENT PARAM !!!!!!!
+        count_of_garanty_early_step_iters = (5, 30)                                                                                             # EXPERIMENT PARAM !!!!!!!
 
+        early_stop_cell_idexes_and_count = {}
+        for cell in self.cell_list:
+            if isinstance(cell.list_of_organells[0], Vesicles):
+                if get_bool_rand_probability(probability_earli_stop_of_vesicles):
+                    early_stop_cell_idexes_and_count[cell.index] = get_rand_int(count_of_garanty_early_step_iters)
+
+        arr_of_num_work_points = np.zeros(len(self.cell_list), dtype=int)
+
+        logger.main("Расширение основного циккла")
+        # Расширение для всех, но с лимитом остановочных
+        cycle_repit = repit_flag
+        while cycle_repit:
+            cycle_repit = self.ExpansionOfRegionsIter(arr_of_num_work_points, early_stop_cell_idexes_and_count)
             iteration_counter += 1
             logger.main(
                 f"{iteration_counter}-я итерация, num_of_points {arr_of_num_work_points}, work_of_points {arr_of_num_work_points.sum()} и {summ_of_work_point} of {self.data.shape[0] * self.data.shape[1] * self.data.shape[2]}")
-
             summ_of_work_point += arr_of_num_work_points.sum()
+
+        logger.main("Расширение остатков")
+        # Расширение тех, кто рано остановился для того чтобы правильно закончили внутрянку
+        cycle_repit = repit_flag
+        while cycle_repit:
+            cycle_repit = self.ExpansionOfRegionsIter(arr_of_num_work_points)
+            iteration_counter += 1
+            logger.main(
+                f"{iteration_counter}-я итерация, num_of_points {arr_of_num_work_points}, work_of_points {arr_of_num_work_points.sum()} и {summ_of_work_point} of {self.data.shape[0] * self.data.shape[1] * self.data.shape[2]}")
+            summ_of_work_point += arr_of_num_work_points.sum()
+
+
+        self._ExpansionOfMembranens()
+        self._AddedPSD(early_stop_cell_idexes_and_count)
 
         logger.main(f"ExpansionOfRegions completed in {iteration_counter} iterations")
 
-    def _expanded_mask(self, mask, value):
-        pass
+    def _ExpansionOfMembranens(self):
+        logger.cell("Expansion of membrans and create axons")
+        if self.cell_fields is not None:
+            # Создание регионов для расслоения (Пока что пробная версия)
+            mask_for_shift_boundary = generate_spheres_mask(self.cell_fields.shape,
+                                                            density= 0.25,                                                                                             # EXPERIMENT PARAM !!!!!!!
+                                                            radius_range = (4,30),                                                                                     # EXPERIMENT PARAM !!!!!!!
+                                                            )
+            logger.main("Calculate shitfing membranes")
 
+            ############################################## ЭКСПЕРИМЕНТАЛЬНОЕ ##########################################
+            capillary_count = 1 ############################################################################################ Создание обычной клетки с более толстой оболочкой (возможно капиляры)) # EXPERIMENT PARAM !!!!!!!
+
+            for cell in self.cell_list:
+                if (not isinstance(cell, Axon)) and isinstance(cell.list_of_organells[0], EmptyOrganelle) and capillary_count > 0:
+                    logger.organelle("Draw EmptyOrganell as СapillaryShell")
+                    capillary_membrane_size = get_rand_int((4,7)) - 1   ############################################# Прям толстенькая
+                    shift_boundary_with_shell(self.cell_fields, cell.index, capillary_membrane_size)
+                    capillary_count -= 1
+                    logger.main("Сapillary created")
+                else:
+                    cell.PostExpansionMembrance(self.cell_fields, mask_for_shift_boundary)
+
+    def _AddedPSD(self, dict_of_vesicles_indexes):
+        count_of_PSD = (self.params["max_count_of_organells"]["PSD"] if "PSD" in self.params["max_count_of_organells"].keys() else 0)
+        logger.main(f"Добавление {count_of_PSD} PSD")
+
+
+        axon_indices = [cell.index for cell in self.cell_list if isinstance(cell, Axon)]
+        no_axon_list = [cell for cell in self.cell_list if not isinstance(cell, Axon)]
+
+        list_of_indexes_vec_cells = [*dict_of_vesicles_indexes.keys()]
+        for i in range(count_of_PSD):
+            if len(list_of_indexes_vec_cells) > 0:
+                cell = self.cell_list[list_of_indexes_vec_cells.pop()]
+            else:
+                cell = random.choice(no_axon_list)  ##################################################################################################################### Нужно доработать
+
+            cell.Create_PSD(self.cell_fields, axon_indices, self.params)
+
+    '''
     ###################################################################################################################################### переделать функцию
     def DrawMembransMask(self):
         if self.cell_fields is None:
             raise RuntimeError("Мембраны ещё не считались! Для получения мембран нужно запустить алгоритм разрастания регионов!")
 
-        mode = "semantic"
+        mode = "semantic"                       ######################################### ПАРАМЕТР НА БУДУЩЕЕ
         if mode == "semantic":
             for cell in self.cell_list:
-                if cell.index in self.axon_cell_index_list:
+                if isinstance(cell, Axon):
                     continue
                 else:
-                    draw_data_by_mask_and_random_value(self.masks[self.params["dict_of_organells"]["Membranes"]],
-                                                       self.cell_fields[:,:,:] == -cell.index,
-                                                       self.params["membrane_mask_color"])        ######## PARAM
+                    cell.DrawMembraneMask
+
         elif mode == "instance":
             NotImplementedError("Membrane mode 'instance' no realised")
         else:
             raise NotImplementedError("Now membrane mode only 'semantic'")
+    '''
 
     ################################################################################################################################################################### НУЖНА ДЛЯ ОТЛАДКИ
     def DrawMembranesForView(self):
@@ -221,9 +317,14 @@ class MainField:
             raise RuntimeError("Мембраны ещё не считались! Для получения мембран нужно запустить алгоритм разрастания регионов!")
 
         view_data = np.zeros(self.cell_fields.shape + (3,), dtype=np.uint8)
-        return draw_data_by_mask_and_random_value(view_data,
-                                                  self.cell_fields[:,:,:] < 0,
-                                                  self.params["membrane_mask_color"]) ######## PARAM
+        for cell in self.cell_list:
+            if isinstance(cell, Axon):
+                continue
+            else:
+                draw_data_by_mask_and_random_value(view_data,
+                                                   self.cell_fields[:,:,:] == -cell.index,
+                                                   self.params["membrane_mask_color"])        ######## PARAM
+        return view_data
 
     @log_execution(level="main")
     def DrawMasks(self):
@@ -235,95 +336,36 @@ class MainField:
                     continue # не отображается
                 elif isinstance(organell, Mitohondrion) and "Mitohondrion" in self.params["dict_of_organells"].keys():
                     organell.DrawMask(self.masks[self.params["dict_of_organells"]["Mitohondrion"]])
+                elif isinstance(organell, PSD) and "PSD" in self.params["dict_of_organells"].keys():
+                    organell.DrawMask(self.masks[self.params["dict_of_organells"]["PSD"]])
                 else:
                     raise ValueError(f"This organelle type {type(organell)} is not supported yet!")
 
-        if self.cell_fields is not None and "Membranes" in self.params["dict_of_organells"].keys():
-            self.DrawMembransMask()
+            if isinstance(cell, Axon):
+                cell.DrawMembraneMask(self.masks[self.params["dict_of_organells"]["Axon"]], self.cell_fields)
+            else:
+                if self.cell_fields is not None and "Membranes" in self.params["dict_of_organells"].keys():
+                    cell.DrawMembraneMask(self.masks[self.params["dict_of_organells"]["Membranes"]], self.cell_fields)
 
     @log_execution(level="main")
     def DrawDataset(self):
-        logger.main("Draw organells")
-        for cell in self.cell_list:
-            for organell in cell.list_of_organells:
-                organell.Draw(self.data)
+        total_cells = len(self.cell_list)
 
-        if self.cell_fields is not None:
-            logger.main("Draw axon and membrans")
-            ############################################################################################################################ ЭКСПЕРИМЕНТАЛЬНАЯ ФУНКЦИЯ
-            mask_for_shift_boundary = generate_spheres_mask(self.cell_fields.shape,
-                                                            density= 0.25,
-                                                            radius_range = (4,30),
-                                                            )
+        # Чтобы на затенение PSD могли наложиться везикулы
+        for cell in tqdm(self.cell_list, desc='Draw cells membrans, axon shells and PSD'):
+            cell.DrawMembrane(self.data, self.cell_fields)
+            # Выводим прогресс на новой строке
 
-            ############################################################################################################################################################## AXON PARAM
-            logger.main("Calculate shitfing membranes")
-            distance_cell_shift_range = self.params["distance_cell_shift_range"]
-
-            if "AxonShell" in self.params["max_count_of_organells"].keys():
-                count_of_axons = self.params["max_count_of_organells"]["AxonShell"]
-            else:
-                count_of_axons = 0
-            self.axon_cell_index_list = []
-
-            capillary_count = 1 ############################################################################################ Создание обычной клетки с более толстой оболочкой (возможно капиляры)
-
-            # РИСОВАНИЕ АКСОНА
-            for cell in self.cell_list:
-                if isinstance(cell.list_of_organells[0], EmptyOrganelle) and count_of_axons > 0:
-                    logger.organelle("Draw EmptyOrganell as AxonShell")
-                    axon_membrane_size = get_rand_int(self.params["axon_membrane_size"])
-                    axon_color_membrane_param = self.params["axon_color_membrane_param"]
-
-                    _, axon_mask = shift_boundary_with_shell(self.cell_fields, cell.index, axon_membrane_size)
-                    draw_data_by_mask_and_random_value(self.data,
-                                                       axon_mask==True,
-                                                       axon_color_membrane_param)  ######## PARAM
-
-                    self.axon_cell_index_list.append(cell.index)
-                    count_of_axons -= 1
-                    logger.main("AxonShell created")
-
-                elif isinstance(cell.list_of_organells[0], EmptyOrganelle) and capillary_count > 0:
-                    logger.organelle("Draw EmptyOrganell as СapillaryShell")
-                    capillary_membrane_size = get_rand_int((1,3))   ############################################# Прям толстенькая
-                    _, capillary_mask = shift_boundary_with_shell(self.cell_fields, cell.index, capillary_membrane_size)
-                    capillary_count -= 1
-                    logger.main("Сapillary created")
-
-                else:
-                    size_of_shift = get_rand_int(distance_cell_shift_range)
-                    if size_of_shift > 0:
-                        shift_boundary(self.cell_fields, cell.index, size_of_shift, mask_for_shift_boundary)
-                    added_thickness = get_rand_int(1) # Пока что константа в 2 вокселя ##############################################################################
-                    if added_thickness > 0:
-                        _, new_mask = shift_boundary_with_shell(self.cell_fields, cell.index, added_thickness)
-                    logger.main(f"Cell {cell.index} shift_boundary complited")
-
-            logger.main("Draw membranes")
-            # РИСОВАНИЕ МЕМБРАН
-            membrane_color_param = self.params["membrane_color"]
-            get_fun_type = get_color_index_fun_by_param(membrane_color_param)
-            if get_fun_type == 2:################################################################### задание основного и цвета в диапазоне для повышения разнообразия цвета каждой клетки
-                for cell in self.cell_list:
-                    if cell.index in self.axon_cell_index_list:
-                        continue
-                    else:
-                        main_membrane_color = choise_use_color_by_param(membrane_color_param)
-                        min_range = membrane_color_param[0] - membrane_color_param[1]
-                        max_range = membrane_color_param[0] + membrane_color_param[1]
-                        change_3sigma = min(abs(main_membrane_color - min_range),
-                                            abs(max_range - main_membrane_color))
-                        use_interior_color_param = (main_membrane_color, change_3sigma)
-
-                        draw_data_by_mask_and_random_value(self.data,
-                                                           self.cell_fields[:,:,:] == -cell.index,
-                                                           use_interior_color_param)                ######## PARAM
-
-            else:
-                draw_data_by_mask_and_random_value(self.data,
-                                                   self.cell_fields[:,:,:] < 0,
-                                                   membrane_color_param)                        ######## PARAM
+        for idx, cell in enumerate(self.cell_list, start=1):
+            cell.DrawOrganelles(self.data, self.cell_fields)
+            # Выводим прогресс на новой строке
+            print_progress_bar(
+                idx,
+                total_cells,
+                prefix='Draw cells organells',
+                suffix='',
+                length=40
+            )
 
     @log_execution(level="main")
     def WriteDataset(self, list_of_str=None):
@@ -358,7 +400,7 @@ class MainField:
 
         return cell
 
-    def CheckIntersections(self, newCell: Cell):
+    def CheckIntersections(self, newCell: Cell|Axon):
         for cell in self.cell_list:
             for organel in cell.list_of_organells:
                 for new_organell in newCell.list_of_organells:
@@ -366,7 +408,7 @@ class MainField:
                         return True
         return False
 
-    def AddNewCell(self, cell:Cell):
+    def AddNewCell(self, cell:Cell|Axon):
         count_attempt = 0
         ################################################################################### PARAM
         while self.CheckIntersections(cell) and count_attempt < self.params["max_count_attempt_for_adding_cell"]:
@@ -394,28 +436,54 @@ class MainField:
         self.SetNewPosition(new_cell)
         self.AddNewCell(new_cell)
 
+    def update_draw_config(self, config):
+        if config is not None:
+            update_param(self.params, config, "poisson_noise")
+            if "backgraund" in config.keys():
+                self.params["backgraund"].update(config["backgraund"])
+
+            update_param(self.params, config, "gaussian_blur_radius")
+            update_param(self.params, config, "gaussian_blur_sigma")
+            update_param(self.params, config, "mask_blur_threshold")
+
+            for cell in self.cell_list:
+                cell.update_draw_config(config)
+
+
     @log_execution(level="main")
     def AddCellsByConfig(self):
         max_count_cell_config = self.params["max_count_of_organells"]
         max_count_of_mito = max_count_cell_config.get("Mitohondrion", 0)
         max_count_of_ves = max_count_cell_config.get("Vesicles", 0)
         max_count_of_empty = max_count_cell_config.get("EmptyCell", 0)
+        max_count_of_axons = max_count_cell_config.get("Axon", 0)
 
         list_of_organells = []
         if max_count_of_mito > 0:
-            list_of_organells.append([max_count_of_mito, Mitohondrion])
+            list_of_organells.append([max_count_of_mito, Mitohondrion, Cell])
         if max_count_of_ves > 0:
-            list_of_organells.append([max_count_of_ves, Vesicles])
+            list_of_organells.append([max_count_of_ves, Vesicles, Cell])
         if max_count_of_empty > 0:
-            list_of_organells.append([max_count_of_empty, EmptyOrganelle])
+            list_of_organells.append([max_count_of_empty, EmptyOrganelle, Cell])
+        if max_count_of_empty > 0:
+            list_of_organells.append([max_count_of_axons, EmptyOrganelle, Axon]) # Основа клетки - пустая органелла
 
-        while len(list_of_organells) > 0:
+        count_of_added_organells = sum(self.params["max_count_of_organells"].values()) - (self.params["max_count_of_organells"]["PSD"] if "PSD" in self.params["max_count_of_organells"].keys() else 0)
+
+        # Можно засечь время для отображения затраченного времени (опционально)
+        start_time = time.time()
+        suffix = ''
+        for i in range(count_of_added_organells):
+            print_progress_bar(i+1, count_of_added_organells,
+                               prefix='Добавление органелл',
+                               suffix=suffix,
+                               length=40)  # длина полосы
+
             choise_index = np.random.randint(len(list_of_organells))
-
-            max_count, new_organelle = list_of_organells[choise_index]
+            max_count, new_organelle, cell_class = list_of_organells[choise_index]
             # индекс 0 зарезервирован под пустоту
             new_index = len(self.cell_list) + 1
-            new_cell = Cell(new_index, [new_organelle(self.params)], params=self.params)
+            new_cell = cell_class(new_index, [new_organelle(self.params)], params=self.params)
             self.SetNewPosition(new_cell)
             self.AddNewCell(new_cell)
 
@@ -423,3 +491,10 @@ class MainField:
                 list_of_organells[choise_index][0] -= 1
             else:
                 list_of_organells.pop(choise_index)
+
+            # Выводим прогресс на новой строке
+            elapsed = time.time() - start_time
+            # Добавим время, если нужно
+            suffix = f'[Время: {elapsed:.1f}с]'
+
+        print(f'Добавление {count_of_added_organells} органелл завершено за {elapsed:.1f}с')

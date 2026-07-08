@@ -1,16 +1,25 @@
 import numpy as np
-from Synthetic3D.src.hard.drawing_and_filliing.draw_sphere import draw_small_sphere
-from Synthetic3D.src.hard.drawing_and_filliing.fill_sphere import fill_small_sphere
 
 from Synthetic3D.src.organells.abstract_organell import Organell
 from Synthetic3D.src.hard.structure.vector import Vector
-from Synthetic3D.src.hard.random_params import get_rand_int, get_bool_rand_probability, color_dim_check, choise_use_color_by_param, get_color_index_fun_by_param
-from Synthetic3D.src.utilities.check_of_params import check_param
+from Synthetic3D.src.hard.random_params import get_rand_int, get_rand_float, get_bool_rand_probability, color_dim_check, choise_use_color_by_param, get_color_index_fun_by_param
+from Synthetic3D.src.utilities.check_of_params import check_param, update_param
 
 from Synthetic3D.src.utilities.logging_config import logger
+from Synthetic3D.src.hard.structure.vesicle import get_vesicle_type, get_random_type_of_vesicles_name, AbstractVesicle, CapsuleVesicle
 
+from scipy.ndimage import binary_dilation, binary_erosion, generate_binary_structure
 
 ACCEPTABLE_TYPES_OF_VESICLE_CLUSTER_SHAPES = ["Cuboid", "Ellipsoid"]
+
+from tqdm import tqdm
+
+def make_ball(radius):
+    """Создать 3D-массив шара заданного радиуса."""
+    size = 2 * radius + 1
+    center = radius
+    y, x, z = np.ogrid[-center:size-center, -center:size-center, -center:size-center]
+    return (x*x + y*y + z*z) <= radius*radius
 
 
 class Vesicles(Organell):
@@ -35,11 +44,13 @@ class Vesicles(Organell):
 
         warning_list+=check_param(self.params, "radius_of_vesicle", (3,6))
         warning_list+=check_param(self.params, "probability_of_vesicle_filling", 0.5)
-        warning_list+=check_param(self.params, "thickness", 0.5)
+        warning_list+=check_param(self.params, "thickness", 1)
         warning_list+=check_param(self.params, "membrane_color", (255, 0, 0))
         warning_list+=check_param(self.params, "inner_color", (0, 255, 0))
 
-        warning_list+=check_param(self.params, "number_of_vesicles", (25, 100))
+        #warning_list+=check_param(self.params, "number_of_vesicles", (25, 100))
+        warning_list+=check_param(self.params, "vesicle_packing_fraction", (0.2, 0.4))
+
         warning_list+=check_param(self.params, "max_num_of_attempts2cloud", 1000)
         warning_list+=check_param(self.params, "gap_of_vesicules", 1)
 
@@ -47,62 +58,173 @@ class Vesicles(Organell):
         if self.params["type_of_shape"] == "Cuboid":
             warning_list+=check_param(self.params, "cuboud_shape_radius", (75,50,50))
         elif self.params["type_of_shape"] == "Ellipsoid":
-            warning_list+=check_param(self.params, "ellipsoid_shape_radius", (70,50,30))
+            warning_list+=check_param(self.params, "ellipsoid_shape_radius", (90,60,45))
         else:
             msg = f"ERROR! Type of shape of vesicules cloud may be only: {ACCEPTABLE_TYPES_OF_VESICLE_CLUSTER_SHAPES}"
             raise ValueError(msg)
+
+        warning_list+=check_param(self.params, "vesicle_type", get_random_type_of_vesicles_name())
+
+        if self.params["vesicle_type"] == "CAPSULE":
+            warning_list+=check_param(self.params, "vesicle_half_capsule_len", (2,9))
+            #warning_list+=check_param(self.params, "vesicle_type", get_random_type_of_vesicles_name())
+
 
         if len(warning_list) != 0:
             logger.config(f'\tWarning Vesicles!\n{"\n".join(warning_list)}')
             warning_list = ["Warning Vesicle!"] + warning_list
         return warning_list
 
+    def _calculate_number_of_vesicles(self):
+        vesicle_packing_fraction = self.params["vesicle_packing_fraction"]
+        if isinstance(vesicle_packing_fraction, (int, np.integer)):
+            return 1
+        elif get_color_index_fun_by_param(vesicle_packing_fraction) == 2 or\
+            isinstance(vesicle_packing_fraction, float):
+                radius_param = self.params["radius_of_vesicle"]
+                if get_color_index_fun_by_param(radius_param) == 2:
+                    avg_radius = (radius_param[0] + radius_param[1])/2
+                else:
+                    avg_radius = radius_param
+
+                if isinstance(vesicle_packing_fraction, float):
+                    use_vesicle_packing_fraction = vesicle_packing_fraction
+                else:
+                    use_vesicle_packing_fraction = np.random.uniform(vesicle_packing_fraction[0], vesicle_packing_fraction[1])
+                    self.params["vesicle_packing_fraction"] = use_vesicle_packing_fraction
+
+                # Объём одной сферы
+                vesicle_volume = (4.0 / 3.0) * np.pi * (avg_radius ** 3)
+
+                if self.params["vesicle_type"] == "CAPSULE":
+                    vesicle_half_capsule_len = self.params["vesicle_half_capsule_len"]
+                    mean_len = vesicle_half_capsule_len if isinstance(vesicle_half_capsule_len, (int, float)) else sum(vesicle_half_capsule_len)
+                    cylinder_volume = np.pi * (avg_radius ** 2) * mean_len
+                    vesicle_volume += cylinder_volume
+
+                # Максимальное число сфер при плотнейшей упаковке
+                theoretical_max_count = (self.cloude_volume * 0.7404) / vesicle_volume
+
+                # Желаемое число сфер согласно выбранной доле
+                desired_count = use_vesicle_packing_fraction * theoretical_max_count
+
+                # Округляем вниз, так как дробное количество невозможно
+                return int(np.floor(desired_count))
+
+        else:
+            raise ValueError(f'The function "_calculate_number_of_weights" does not work with the value "{self.params["vesicle_packing_fraction"]}"')
+
+
+    def update_draw_config(self, config):
+        new_params = config.get("vesicles", None)
+        if new_params is not None:
+            update_param(self.params, new_params, "membrane_color")
+            update_param(self.params, new_params, "inner_color")
+
+
     def _Create(self):
         warnings_list = []
-        # radius_list нужен для расчета пересечений
-        self.params["thickness"] = get_rand_int(self.params["thickness"])
+        self.vesicle_objects = []   # список добавленных объектов Vesicle
+
+        self.VesicleClass = get_vesicle_type(self.params["vesicle_type"])                           # ЭКСПЕРИМЕНТАЛЬНЫЙ ТИП ОДИН ДЛЯ ВСЕГО СКОПЛЕНИЯ
 
         if self.params["type_of_shape"] == "Cuboid":
-            x_radius, y_radius, z_radius = self.params["cuboud_shape_radius"]
+            type_of_shape_param = self.params["cuboud_shape_radius"]
+            if isinstance(type_of_shape_param, (list, tuple)):
+                x_radius = get_rand_int(type_of_shape_param[0])
+                y_radius = get_rand_int(type_of_shape_param[1])
+                z_radius = get_rand_int(type_of_shape_param[2])
+                self.params["cuboud_shape_radius"] = (x_radius, y_radius, z_radius)
+                logger.organelle(f'Vesicle cloude size choice Cuboid as half axis {x_radius}, {y_radius} and {z_radius} fo xyz')
+            else:
+                x_radius, y_radius, z_radius = type_of_shape_param
+
             self.max_cloud_radius = np.linalg.norm((x_radius,y_radius,z_radius))
+            self.cloude_volume = x_radius * y_radius * z_radius * 8 # W*H*D
         elif self.params["type_of_shape"] == "Ellipsoid":
-            x_radius, y_radius, z_radius = self.params["ellipsoid_shape_radius"]
+            type_of_shape_param = self.params["ellipsoid_shape_radius"]
+            if isinstance(type_of_shape_param, (list, tuple)):
+                x_radius = get_rand_int(type_of_shape_param[0])
+                y_radius = get_rand_int(type_of_shape_param[1])
+                z_radius = get_rand_int(type_of_shape_param[2])
+                self.params["ellipsoid_shape_radius"] = (x_radius, y_radius, z_radius)
+                logger.organelle(f'Vesicle cloude size choice Ellipsoid as hals axis {x_radius}, {y_radius} and {z_radius} for xyz')
+            else:
+                x_radius, y_radius, z_radius = type_of_shape_param
+
             self.max_cloud_radius = max(x_radius, y_radius, z_radius)
+            self.cloude_volume = 4 / 3 * np.pi *  x_radius * y_radius * z_radius# 4/3*pi*rx*ry*rx
 
-        self.max_radius = max(self.params["radius_of_vesicle"])
+        if get_color_index_fun_by_param(self.params["radius_of_vesicle"]) == 2: ################## Установка малой вариативности внутри одного скопления для повышения реализма
+            min_r, max_r = self.params["radius_of_vesicle"]
+            work_radius = get_rand_int((min_r, max_r))
 
-        self.radius_list = []
-        if isinstance(self.params["number_of_vesicles"], int) and self.params["number_of_vesicles"] == 1:
+            avaleble_radiuce_shith = 1   ######################################################################################################################## PARAM !
+
+            min_work_r = max(min_r, work_radius-avaleble_radiuce_shith)
+            max_work_r = min(max_r, work_radius+avaleble_radiuce_shith)
+
+            self.params["radius_of_vesicle"] = (min_work_r, max_work_r)
+
+        radius_param = self.params["radius_of_vesicle"]
+        self.max_radius = radius_param if isinstance(radius_param, int) else max(radius_param)
+        self.desired_vesicles_count = self._calculate_number_of_vesicles()
+
+        logger.organelle(f'Vesicle desired count {self.desired_vesicles_count} and radius {self.params["radius_of_vesicle"]} with packing fraction {self.params["vesicle_packing_fraction"]}')
+
+        if isinstance(self.params["thickness"], (float, int)):
+            self.max_thickness = self.params["thickness"]
+        else:
+            self.max_thickness = max(self.params["thickness"])
+
+        if self.desired_vesicles_count == 1:
             warnings_list = self.CreateAlone()
         else:
             warnings_list = self.CreateCloude()
         return warnings_list
 
     def CreateAlone(self):
-        print("WARNING!!! CREATE TEST ONE VESICLES")
-        self.shell.add_frame_point(Vector(0, 0, 0))
         ######################################################################################################################## PARAM !
-        self.radius_list = [get_rand_int(self.params["radius_of_vesicle"])]
+        radius_of_vesicle_param = self.params["radius_of_vesicle"]
+        thickness_of_vesicle_param = self.params["thickness"]
+        dop_param = self.params["vesicle_half_capsule_len"] if self.params["vesicle_type"] == "CAPSULE" else None
+
+        vesicle = self.VesicleClass(get_rand_int(radius_of_vesicle_param),
+                                    get_rand_int(thickness_of_vesicle_param),
+                                    get_rand_int(dop_param) if dop_param is not None else None)
+
+        add_point_list = vesicle.point_generation(Vector(0, 0, 0))
+
+        start_index_val = len(self.shell.frame_points)
+        self.shell.add_frame_point_list(add_point_list)
+        vesicle.indices = [i + start_index_val for i in range(len(add_point_list))]
+
+        self.vesicle_objects.append(vesicle)
         ######################################################################################################################## PARAM !
         self.filling_list = [get_bool_rand_probability(self.params["probability_of_vesicle_filling"])]
         self._CalculateViewData()
         return []
 
-
-    ##################################### ТЕСТОВАЯ РЕАЛИЗАЦИЯ №№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№№
     def CreateCloude(self):
-        print("WARNING!!! CREATE TEST VESICLES CLOUDE")
-
         warnings_list = []
+        num_point = self.desired_vesicles_count
 
         ######################################################################################################################## PARAM !
-        num_point = get_rand_int(self.params["number_of_vesicles"])
+        radius_of_vesicle_param = self.params["radius_of_vesicle"]
+        thickness_of_vesicle_param = self.params["thickness"]
+        dop_param = self.params["vesicle_half_capsule_len"] if self.params["vesicle_type"] == "CAPSULE" else None
 
-        ######################################################################################################################## PARAM !
-        radius_of_vesicle = self.params["radius_of_vesicle"]
+        vesicle = self.VesicleClass(get_rand_int(radius_of_vesicle_param),
+                                    get_rand_int(thickness_of_vesicle_param),
+                                    get_rand_int(dop_param) if dop_param is not None else None)
 
-        self.shell.add_frame_point(self.GenNewPoint())
-        self.radius_list = [get_rand_int(radius_of_vesicle)]
+        new_points = vesicle.point_generation(self.GenNewPoint())
+
+        start_index_val = len(self.shell.frame_points)
+        self.shell.add_frame_point_list(new_points)
+        vesicle.indices = [i + start_index_val for i in range(len(new_points))]
+        self.vesicle_objects.append(vesicle)
+
 
         ######################################################################################################################## PARAM !
         probability_of_vesicle_filling = self.params["probability_of_vesicle_filling"]
@@ -114,23 +236,30 @@ class Vesicles(Organell):
         # Создание облака точек
         miss_point_counter = 0
         self.global_miss_point_counter = 0
-        for i in range(num_point-1):
+        for i in tqdm(range(num_point-1), desc="Добавление везикул в скопление"):
             attempt_counter = 0
 
-            new_point = self.GenNewPoint()
-            new_radius = get_rand_int(radius_of_vesicle)
+            new_vesicle = self.VesicleClass(get_rand_int(radius_of_vesicle_param),
+                                            get_rand_int(thickness_of_vesicle_param),
+                                            get_rand_int(dop_param) if dop_param is not None else None)
+            new_points = new_vesicle.point_generation(self.GenNewPoint())
 
-            while self.CheckIntersection(new_point, new_radius) and\
+            while self.CheckIntersection(new_vesicle, new_points) and\
                   attempt_counter < max_num_of_attempts2cloud:
-                new_point = self.GenNewPoint()
-                new_radius = get_rand_int(radius_of_vesicle)
+                new_vesicle = self.VesicleClass(get_rand_int(radius_of_vesicle_param),
+                                                get_rand_int(thickness_of_vesicle_param),
+                                                get_rand_int(dop_param) if dop_param is not None else None)
+                new_points = new_vesicle.point_generation(self.GenNewPoint())
+
                 attempt_counter += 1
 
             if attempt_counter == max_num_of_attempts2cloud:
                 miss_point_counter+=1
             else:
-                self.shell.add_frame_point(new_point)
-                self.radius_list.append(new_radius)
+                start_index_val = len(self.shell.frame_points)
+                self.shell.add_frame_point_list(new_points)
+                new_vesicle.indices = [i + start_index_val for i in range(len(new_points))]
+                self.vesicle_objects.append(new_vesicle)
                 self.filling_list.append(get_bool_rand_probability(probability_of_vesicle_filling))
 
             self.global_miss_point_counter += attempt_counter
@@ -145,15 +274,18 @@ class Vesicles(Organell):
         self._CalculateViewData()
         return warnings_list
 
-    def CheckIntersection(self, point, radius):
+    def CheckIntersection(self, new_vesicle, new_points):
         ######################################################################################################################## PARAM !
         gap_of_vesicules = self.params["gap_of_vesicules"]
 
-        for i, cloud_point in enumerate(self.shell.get_frames()):
-            cloud_radius = self.radius_list[i]
-            dist_between_points = np.linalg.norm(cloud_point-point)
-            ######################################################################################################################## PARAM !
-            if dist_between_points < cloud_radius+radius+gap_of_vesicules+self.params["thickness"]:
+        for cloude_ves in self.vesicle_objects:
+            cloude_ves_pos = cloude_ves.get_coords(self.shell.frame_points)
+
+            if AbstractVesicle.check_intersection(new_vesicle,
+                                                  new_points,
+                                                  cloude_ves,
+                                                  cloude_ves_pos,
+                                                  gap_of_vesicules):
                 return True
         return False
 
@@ -217,29 +349,14 @@ class Vesicles(Organell):
         else:
             use_membrane_color_param = membrane_color_param
 
-        for i, frame_point in enumerate(self.view_shell.get_frames()):
+
+        for i, vesicle in enumerate(self.vesicle_objects):
             work_membrane_color = color_dim_check(choise_use_color_by_param(use_membrane_color_param), data.shape)
             if self.filling_list[i]:
                 work_inner_color = color_dim_check(choise_use_color_by_param(self.params["inner_color"]), data.shape)
-                fill_small_sphere(data,
-                                  frame_point,
-                                  self.radius_list[i],
-                                  ######################################################################################################################## PARAM !
-                                  work_inner_color)
-                draw_small_sphere(data,
-                                  frame_point,
-                                  self.radius_list[i],
-                                  ######################################################################################################################## PARAM !
-                                  work_membrane_color,
-                                  ######################################################################################################################## PARAM !
-                                  self.params["thickness"])
+                vesicle.DrawOneVesicle(data, work_membrane_color, work_inner_color, True, self.view_shell.get_frames())
             else:
-                fill_small_sphere(data,
-                                  frame_point,
-                                  ######################################################################################################################## PARAM !
-                                  self.radius_list[i]+self.params["thickness"],
-                                  ######################################################################################################################## PARAM !
-                                  work_membrane_color)
+                vesicle.DrawOneVesicle(data, work_membrane_color, None, False, self.view_shell.get_frames())
 
     def DrawMask(self, mask_data, color=None):
         self.view_shell.transform_coords2int()
@@ -248,43 +365,33 @@ class Vesicles(Organell):
         work_color = self.params["mask_color"] if color is None else color
         work_color = color_dim_check(work_color, mask_data.shape)
 
-        for i, frame_point in enumerate(self.view_shell.get_frames()):
-            fill_small_sphere(mask_data,
-                              frame_point,
-                              self.radius_list[i] + self.params["thickness"],
-                              work_color)
+        for vesicle in self.vesicle_objects:
+            vesicle.DrawOneVesicleMask(mask_data, work_color, self.view_shell.get_frames())
 
-
-    ###################################################################################################################### НЕ ОЧЕНЬ ХОРОШАЯ РЕАЛИЗАЦИЯ
     def DrawArea(self, cell_data, color) -> list[Vector]:
-        print("НУЖНО ДОДЕЛАТЬ DrawArea Vesicules")
-        pos_list = []
+        self.view_shell.transform_coords2int()
 
-        #work_color = color_dim_check(color, cell_data.shape)
+        # 1. Рисование исходных везикул
+        for vesicle in self.vesicle_objects:
+            vesicle.DrawOneVesicleArea(cell_data, color, self.view_shell.get_frames())
 
-        d, h, w = cell_data.shape[:3]
+        # 2. Морфологическое закрытие: 20 дилатаций + 20 эрозий ядром 3×3×3
+        mask = (cell_data == color)                    # бинарная маска объекта
+        struct = generate_binary_structure(3, 1)
 
-        for i, frame_point in enumerate(self.view_shell.get_frames()):
-            radius = self.radius_list[i] + self.params["thickness"] + 1
-            pos = np.round(frame_point).astype(int)
+        # Расширение (заполняет промежутки между везикулами, сглаживает впадины)
+        dilated = binary_dilation(mask, structure=struct, iterations=20)
+        # Сужение (восстанавливает размер, сглаживая выступы)
+        closed_mask = binary_erosion(dilated, structure=struct, iterations=20, border_value=True)
 
-            max_radius_compare = (radius + 0.5) ** 2
-            min_radius_compare = (radius - 0.5) ** 2
+        # Обновляем тензор: все воксели внутри закрытой маски получают цвет объекта
+        cell_data[closed_mask] = color
 
-            for z in range(-radius, radius + 1, 1):
-                now_z = pos[2] + z
-                if 0 <= now_z < d:
-                    radius_sum_z = z ** 2
-                    for x in range(-radius, radius + 1, 1):
-                        now_x = pos[0] + x
-                        if 0 <= now_x < w:
-                            radius_sum_zx = radius_sum_z + x ** 2
-                            for y in range(-radius, radius + 1, 1):
-                                now_y = pos[1] + y
-                                if 0 <= now_y < h:
-                                    radius_sum_zxy = radius_sum_zx + y ** 2
-                                    if radius_sum_zxy <= max_radius_compare:
-                                        cell_data[now_z, now_y, now_x] = color
-                                        if min_radius_compare <= radius_sum_zxy:
-                                            pos_list.append(Vector(now_x, now_y, now_z, dtype=int))
-        return pos_list
+        # 3. Вычисление граничных вокселей (поверхность)
+        eroded = binary_erosion(closed_mask, structure=struct, iterations=1)
+        boundary_mask = closed_mask & ~eroded          # объект минус его эрозия
+
+        coords = np.argwhere(boundary_mask)            # массив (N, 3) координат
+        new_pos_list = [Vector(x, y, z) for x, y, z in coords]
+
+        return new_pos_list

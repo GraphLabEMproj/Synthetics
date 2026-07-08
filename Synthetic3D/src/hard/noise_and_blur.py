@@ -19,14 +19,16 @@ def fill_tensor(shape, mode, val1, val2, c, gaussian_radius, gaussian_sigma):
         print("val1", val1)
         return np.full(shape, val1, dtype=np.uint8)
     spatial_shape = shape[:3] if len(shape) == 4 else shape
+
+    target_std = val2/3
     # Генерируем случайный шум
-    random_vals = np.random.normal(loc=0.0, scale=val2, size=spatial_shape)
+    random_vals = np.random.normal(loc=0.0, scale=target_std, size=spatial_shape)
     # Преобразование шума в области с плавным изменением интенсивности
     smoothed = gaussian_filter(random_vals, radius=gaussian_radius, sigma=gaussian_sigma)
 
     # Масштабируем до нужного sigma и добавляем среднее
     actual_std = np.std(smoothed)
-    result_vals = (smoothed / actual_std) * val2 + val1
+    result_vals = (smoothed / actual_std) * target_std + val1
 
     # Обрезаем до [0, 255]
     result_vals = np.clip(np.round(result_vals), 0, 255).astype(np.uint8)

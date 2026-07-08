@@ -8,6 +8,7 @@ def draw_data_by_mask_and_random_value(data, mask, color_param):
         index_fun = get_color_index_fun_by_param(color_param)
         if index_fun == 2:
             val1, val2 = color_param
+            target_std = val2/3
 
             random_vals = np.random.normal(loc=0.0, scale=1, size=spatial_shape)
             # Преобразование шума в области с плавным изменением интенсивности
@@ -15,7 +16,7 @@ def draw_data_by_mask_and_random_value(data, mask, color_param):
 
             # Масштабируем до нужного sigma и добавляем среднее
             actual_std = np.std(smoothed)
-            result_vals = (smoothed / actual_std) * val2 + val1
+            result_vals = (smoothed / actual_std) * target_std + val1
 
             # Обрезаем до [0, 255]
             result_vals = np.clip(np.round(result_vals), 0, 255).astype(np.uint8)

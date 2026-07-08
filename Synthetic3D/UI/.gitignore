@@ -5,25 +5,17 @@
 *.d
 
 dataset/
-datasets/
-test_gen*
-
-*.log
 
 # Object files
 *.o
 *.ko
 *.obj
 *.elf
-*.spyproject
 
 # Linker output
 *.ilk
 *.map
 *.exp
-
-*.xml
-*.iml
 
 # Precompiled Headers
 *.gch

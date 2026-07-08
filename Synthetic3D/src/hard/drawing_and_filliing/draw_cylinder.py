@@ -35,7 +35,7 @@ def draw_2d_points_in_3d(data, UVpoints, start_point, direction, color, scale):
             indices = (z_indices, y_indices, x_indices)
             data[indices] = color
 
-    point3d = start_point.copy()
+    point3d = start_point.copy().astype(float)
     norm_dir = normalize_vector(direction) / scale
     while np.linalg.norm(point3d - end_point) > 1 / scale:
         write_cycle(point3d)

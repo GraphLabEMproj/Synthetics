@@ -8,6 +8,7 @@ CONFIG_LEVEL = 21 # 1
 CRISTAE_LEVEL = 11
 DRAW_LEVEL = 12
 SHELL_LEVEL = 13
+CELL_LEVEL = 14
 ORGANELLE_LEVEL = 31
 MAIN_LEVEL = 32
 
@@ -33,6 +34,7 @@ LOG_COLORS = {
     'CRISTAE':   '\033[38;2;100;100;100m',  # Серый
     'ORGANELLE': '\033[38;2;200;200;200m',  # Белый
     'MAIN':      '\033[38;2;200;200;200m',  # Белый
+    'CELL':      '\033[33m',  # Желтый
     'SHELL':     '\033[33m',  # Желтый
     'DEBUG':     '\033[36m',  # Циан
     'INFO':      '\033[32m',  # Зеленый
@@ -57,6 +59,7 @@ def add_user_lavelnames():
     logging.addLevelName(ORGANELLE_LEVEL, "ORGANELLE")
     logging.addLevelName(MAIN_LEVEL, "MAIN")
     logging.addLevelName(SHELL_LEVEL, "SHELL")
+    logging.addLevelName(CELL_LEVEL, "CELL")
 
     # Расширяем логгер для новых методов
     def config(self, message, *args, **kwargs):
@@ -78,6 +81,11 @@ def add_user_lavelnames():
     def shell(self, message, *args, **kwargs):
         if self.isEnabledFor(SHELL_LEVEL):
             self._log(SHELL_LEVEL, message, args, **kwargs)
+
+    def cell(self, message, *args, **kwargs):
+        if self.isEnabledFor(CELL_LEVEL):
+            self._log(CELL_LEVEL, message, args, **kwargs)
+
     def cristae(self, message, *args, **kwargs):
         if self.isEnabledFor(CRISTAE_LEVEL):
             self._log(CRISTAE_LEVEL, message, args, **kwargs)
@@ -88,6 +96,7 @@ def add_user_lavelnames():
     logger.organelle = organelle.__get__(logger)
     logger.main = main.__get__(logger)
     logger.shell = shell.__get__(logger)
+    logger.cell = cell.__get__(logger)
     logger.cristae = cristae.__get__(logger)
 
 def init_custom_logger():
@@ -95,6 +104,7 @@ def init_custom_logger():
     # Проверка, есть ли уже логгер с этим именем
     if logger is None:
         logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
 
         # Создаем или получаем логгер
         logger.setLevel(logging.DEBUG)

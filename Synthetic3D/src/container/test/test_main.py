@@ -29,8 +29,8 @@ def test_of_adding_noises_MainField():
 def test_expansion_MainField():
     main = MainField()
     main.CreateData()
-    for i in range(16):
-        logger.main(f"Generation {i} organelle of 16")
+    for i in range(10):
+        logger.main(f"Generation {i} organelle of 10")
         main.CreateAndAddCell()
 
     field_area = np.zeros(main.data.shape[:3], dtype=int)
@@ -63,8 +63,8 @@ def test_expansion_MainField():
         print(
             f"{iter}-я итерация, num_of_points {arr_of_num_work_points}, work_of_points {arr_of_num_work_points.sum()} и {summ_of_work_point} of {main.data.shape[0] * main.data.shape[1] * main.data.shape[2]}")
         summ_of_work_point += arr_of_num_work_points.sum()
-        #if iter % 10 == 0:
-        #    view_vtk_3D_data(view_data)
+        if iter % 10 == 0:
+            view_vtk_3D_data(view_data)
 
     end_time = time.time()
     print(f"На разрастание регионов размером {main.cell_fields.shape} потребовалось {end_time-start_time} секунд")

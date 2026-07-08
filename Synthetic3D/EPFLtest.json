@@ -1,27 +1,27 @@
 {
-    "shape_of_data": [128, 128, 128],
+    "shape_of_data": [256, 256, 256],
     "channel_num": 3,
 
     "dict_of_organells": {
         "Mitohondrion": 0,
         "Vesicles": 1,
-        "Membranes": 2
+        "Membranes": 2,
+        "Axon": 3,
+        "PSD": 4
     },
 
     "max_count_of_organells": {
         "Mitohondrion": 1,
-        "Vesicles": 1,
-        "EmptyCell": 1,
-        "AxonShell": 1
+        "Vesicles": 2,
+        "EmptyCell": 2,
+        "Axon": 1,
+        "PSD": 3
     },
 
-    "membrane_color": [86, 13],
-    "distance_cell_shift_range": [0,2],
-
     "backgraund": {
-        "background_color": [188, 10],
-        "background_noise_color": [95, 30],
-        "density": 0.001,
+        "background_color": [187, 10],
+        "background_noise_color": [95, 20],
+        "density": 0.0015,
         "gaussian_radius": 4,
         "gaussian_sigma": 2
     },
@@ -32,24 +32,52 @@
 
     "poisson_noise": 11,
 
+    "cell": {
+        "membrane_thickness": 2,
+        "distance_cell_shift_range": [0,2],
+        "membrane_color_param": [95, 21]
+    },
+
+    "axon" : {
+        "membrane_thickness": [5,10],
+        "membrane_color_param": [74, 20],
+        "inner_thickness": [10, 20],
+        "inner_color_param": [135, 30],
+        "input_membrane_thickness": [4,6]
+    },
+
     "vesicles": {
-        "number_of_vesicles": [180, 400],
-        "radius_of_vesicle": [4, 7],
-        "membrane_color": [88, 9],
-        "inner_color": [111, 12],
+        "vesicle_packing_fraction": [0.25, 0.3],
+        "radius_of_vesicle": [4, 6],
+        "membrane_color": [84, 20],
+        "inner_color": [110, 12],
         "probability_of_vesicle_filling": 1.0,
-        "thickness" : [1, 2]
+        "gap_of_vesicules": 0,
+        "thickness" : [1, 2],
+        "ellipsoid_shape_radius": [[70, 120],[40, 80],[30, 60]]
     },
 
     "mitohondrion": {
         "radius_of_section": [20, 42],
         "len_of_mitohondrion": [384, 768],
-        "membrane_thickness": 3,
-        "mito_membrane_color": [92, 12],
-        "matrix_color": [127, 10],
-        "cristae_membrane_color": [87, 15],
-        "cristae_color": [154, 12],
-        "cristae_thickness": 2,
+        "membrane_thickness": [3,5],
+        "mito_membrane_color": [93, 40],
+        "matrix_color": [125, 35],
+        "cristae_membrane_color": [93, 39],
+        "cristae_radius": [3, 6],
+        "cristae_color": [152, 36],
+        "cristae_thickness": [1,2],
         "num_partition_of_triangles":3
-   }
+   },
+
+    "psd" : {
+        "radius": [15, 40],
+        "presynapse_thickness": [2,4],
+        "postsynapse_thickness": [2,4],
+        "synapse_color_param": [59, 15],
+        "gap_thickness": [1, 3],
+        "gap_color_param": [110, 20],
+        "out_thickness": [10, 20],
+        "out_color_param": [114, 20]
+    }
 }

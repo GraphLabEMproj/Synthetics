@@ -36,7 +36,9 @@ print(log_list[-1])
 s_t_add = time.time()
 generator.AddCellsByConfig()
 e_t_add = time.time()
-log_list.append(f"Затраты времени на создание добавление {generator.count_organells} из запланированных {sum(config['max_count_of_organells'].values())} органелл {e_t_add-s_t_add} сек")
+
+count_of_added_organells = sum(generator.params["max_count_of_organells"].values()) - (generator.params["max_count_of_organells"]["PSD"] if "PSD" in generator.params["max_count_of_organells"].keys() else 0)
+log_list.append(f"Затраты времени на создание добавление {generator.count_organells} из запланированных {count_of_added_organells} органелл {e_t_add-s_t_add} сек")
 print(log_list[-1])
 
 s_t_exp = time.time()
@@ -91,7 +93,16 @@ for str_log in log_list:
 
 run_check_statistic_syn_dataset(generator.params["save_dataset_dir"])
 
-view_vtk_3D_data(generator.data)
-view_vtk_3D_data(generator.masks[0])
-view_vtk_3D_data(generator.masks[1])
-view_vtk_3D_data(generator.masks[2])
+import numpy as np
+if np.any(generator.data):
+    view_vtk_3D_data(generator.data)
+if np.any(generator.masks[0]):
+    view_vtk_3D_data(generator.masks[0])
+if np.any(generator.masks[1]):
+    view_vtk_3D_data(generator.masks[1])
+if np.any(generator.masks[2]):
+    view_vtk_3D_data(generator.masks[2])
+if np.any(generator.masks[3]):
+    view_vtk_3D_data(generator.masks[3])
+if np.any(generator.masks[4]):
+    view_vtk_3D_data(generator.masks[4])

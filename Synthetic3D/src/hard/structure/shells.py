@@ -259,6 +259,10 @@ class FrameShell(OuterShell):
     def add_frame_point(self, point):
         self.frame_points.append(point)
 
+    def add_frame_point_list(self, list_of_points):
+        for point in list_of_points:
+            self.frame_points.append(point)
+
     def get_frames(self):
         return self.frame_points
 
@@ -336,6 +340,10 @@ class ThickVertexShell:
     def add_frame_point(self, point):
         self.frame_points.append(point)
 
+    def add_frame_point_list(self, list_of_points):
+        for point in list_of_points:
+            self.frame_points.append(point)
+
     def get_frames(self):
         return self.frame_points
 
@@ -386,6 +394,10 @@ class ThickShell:
 
     def add_frame_point(self, point):
         self.frame_points.append(point)
+
+    def add_frame_point_list(self, list_of_points):
+        for point in list_of_points:
+            self.frame_points.append(point)
 
     def get_frames(self):
         return self.frame_points
