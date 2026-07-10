@@ -1,13 +1,17 @@
 import json
 import time
+import os
 from Synthetic3D.src.container.main_field import MainField
 from Synthetic3D.src.utilities.view_data import view_vtk_3D_data
-from Synthetic3D.src.utilities.logging_config import clear_log_file
+from Synthetic3D.src.utilities.logging_config import clear_log_file, set_log_file_path
 
 from Synthetic3D.utils.statistic import run_check_statistic_syn_dataset
 
-#Удалить прошлую сессию
-clear_log_file()
+# 1. Генерируем уникальное временное имя лога
+temp_log_name = f"generate_{int(time.time())}_{os.getpid()}.log"
+set_log_file_path(temp_log_name)  # теперь весь вывод пойдёт в этот файл
+# 2. (Опционально) Очищаем временный лог, если он уже существует
+clear_log_file(temp_log_name)
 
 log_list = []
 start_time = time.time()

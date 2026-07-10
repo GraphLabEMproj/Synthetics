@@ -1,33 +1,36 @@
 import datetime
 import json
-import os.path
 import numpy as np
+import os.path
 import random
+import sys
+import time
 
 from tqdm import tqdm
 
-from Synthetic3D.src.organells.empty_organelle import EmptyOrganelle
-from Synthetic3D.src.organells.vesicles import Vesicles
-from Synthetic3D.src.organells.mitohondrion import Mitohondrion
 from Synthetic3D.src.container.cell import Cell
 from Synthetic3D.src.container.axon import Axon
 from Synthetic3D.src.container.psd import PSD
-from Synthetic3D.src.hard.random_params import get_rand_int, choise_use_color_by_param, color_dim_check, get_color_index_fun_by_param, get_bool_rand_probability
-from Synthetic3D.src.hard.structure.vector import Vector
+
+from Synthetic3D.src.organells.empty_organelle import EmptyOrganelle
+from Synthetic3D.src.organells.mitohondrion import Mitohondrion
+from Synthetic3D.src.organells.vesicles import Vesicles
+
 from Synthetic3D.src.container.inrersections_rules import CheckTwoOrganells
+
+from Synthetic3D.src.hard.structure.vector import Vector
+from Synthetic3D.src.hard.random_params import get_rand_int, get_bool_rand_probability
 
 from Synthetic3D.src.hard.noise_and_blur import add_internal_structures, CreatePossionNoise, AddGaussianBlur
 from Synthetic3D.src.hard.drawing_and_filliing.draw_data_by_mask import draw_data_by_mask_and_random_value
-
-from Synthetic3D.src.utilities.check_of_params import check_param, update_param
+from Synthetic3D.src.container.cell_operation import generate_spheres_mask, shift_boundary_with_shell
 from Synthetic3D.src.hard.write_data import write_dataset, write_datamask
 
+#from Synthetic3D.src.utilities.check_to_json import to_json_format
+from Synthetic3D.src.utilities.check_of_params import check_param, update_param
 from Synthetic3D.src.utilities.logging_config import logger, set_log_file_path, log_execution
-from Synthetic3D.src.utilities.check_to_json import to_json_format
 
-from Synthetic3D.src.container.cell_operation import generate_spheres_mask, shift_boundary_with_shell, shift_boundary
 
-import time
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█', empty=' ', print_end='\n'):
     """
@@ -185,23 +188,31 @@ class MainField:
         indexes_cell_list = [i for i in range(len(self.cell_list))]
         random.shuffle(indexes_cell_list)  # перемешивание для минимизации приоритетоности
 
+        #print(len(indexes_cell_list), (len(early_stop_cell_idexes_and_count) if early_stop_cell_idexes_and_count is not None else None), "$$$$$$$$$$$$$$$$$$$$$$$$$", flush=True)
         for i in indexes_cell_list:
             cell = self.cell_list[i]
             cell_index = cell.index
 
             if early_stop_cell_idexes_and_count is not None and\
                cell_index in early_stop_cell_idexes_and_count.keys():
-                    if early_stop_cell_idexes_and_count[cell_index] > 0:
-                        if cell.ExpansionOfRegion(self.cell_fields):
-                            repit_flag = True
-                            arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
+                #print("early stop", cell_index)
+                if early_stop_cell_idexes_and_count[cell_index] > 0:
+                    #print("\t", cell_index, early_stop_cell_idexes_and_count[cell_index])
+                    if cell.ExpansionOfRegion(self.cell_fields):
+                        repit_flag = True
+                        arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
                         early_stop_cell_idexes_and_count[cell_index] -= 1
                     else:
-                        continue
+                        early_stop_cell_idexes_and_count[cell_index] = 0
+                else:
+                    continue
             else:
+                #print("default", cell_index)
                 if cell.ExpansionOfRegion(self.cell_fields):
                     repit_flag = True
                     arr_of_num_work_points[cell.index - 1] = len(cell.work_points)
+
+        #print("$$$$$$$$$$$$$$$$$$$$$$$$$", flush=True)
         return repit_flag
 
     @log_execution(level="main")
@@ -214,8 +225,8 @@ class MainField:
         iteration_counter = 0
         summ_of_work_point = 0
 
-        probability_earli_stop_of_vesicles = 0.5                                                                                                # EXPERIMENT PARAM !!!!!!!
-        count_of_garanty_early_step_iters = (5, 30)                                                                                             # EXPERIMENT PARAM !!!!!!!
+        probability_earli_stop_of_vesicles = 0.75                                                                                                # EXPERIMENT PARAM !!!!!!!
+        count_of_garanty_early_step_iters = (3, 20)                                                                                             # EXPERIMENT PARAM !!!!!!!
 
         early_stop_cell_idexes_and_count = {}
         for cell in self.cell_list:
@@ -256,7 +267,7 @@ class MainField:
         if self.cell_fields is not None:
             # Создание регионов для расслоения (Пока что пробная версия)
             mask_for_shift_boundary = generate_spheres_mask(self.cell_fields.shape,
-                                                            density= 0.25,                                                                                             # EXPERIMENT PARAM !!!!!!!
+                                                            density= 0.20,                                                                                             # EXPERIMENT PARAM !!!!!!!
                                                             radius_range = (4,30),                                                                                     # EXPERIMENT PARAM !!!!!!!
                                                             )
             logger.main("Calculate shitfing membranes")
@@ -285,7 +296,7 @@ class MainField:
         list_of_indexes_vec_cells = [*dict_of_vesicles_indexes.keys()]
         for i in range(count_of_PSD):
             if len(list_of_indexes_vec_cells) > 0:
-                cell = self.cell_list[list_of_indexes_vec_cells.pop()]
+                cell = self.cell_list[list_of_indexes_vec_cells.pop() - 1] # индекс на 1 больше, поскольку 0 это индекс фона
             else:
                 cell = random.choice(no_axon_list)  ##################################################################################################################### Нужно доработать
 
@@ -352,20 +363,19 @@ class MainField:
         total_cells = len(self.cell_list)
 
         # Чтобы на затенение PSD могли наложиться везикулы
-        for cell in tqdm(self.cell_list, desc='Draw cells membrans, axon shells and PSD'):
+        for cell in tqdm(self.cell_list, desc='Draw cells membrans, axon shells and PSD', colour="GREEN", file=sys.stdout):
             cell.DrawMembrane(self.data, self.cell_fields)
             # Выводим прогресс на новой строке
 
         for idx, cell in enumerate(self.cell_list, start=1):
-            cell.DrawOrganelles(self.data, self.cell_fields)
             # Выводим прогресс на новой строке
             print_progress_bar(
                 idx,
                 total_cells,
                 prefix='Draw cells organells',
                 suffix='',
-                length=40
-            )
+                length=40)
+            cell.DrawOrganelles(self.data, self.cell_fields)
 
     @log_execution(level="main")
     def WriteDataset(self, list_of_str=None):
@@ -376,10 +386,11 @@ class MainField:
             write_datamask(self.masks[index_dataset], path_to_save, class_name.lower())
 
         self.params["logs"] = list_of_str
-        set_log_file_path(os.path.join(path_to_save, "generate.log"))
-
         with open(os.path.join(path_to_save, 'dataset_config.json'), 'w', encoding='utf-8') as f:
             json.dump(self.params, f, indent=4, ensure_ascii=False)
+
+        set_log_file_path(os.path.join(path_to_save, "generate.log"))
+
 
     def SetNewPosition(self, cell):
         ################################################################################################################## PARAM
@@ -464,9 +475,9 @@ class MainField:
         if max_count_of_ves > 0:
             list_of_organells.append([max_count_of_ves, Vesicles, Cell])
         if max_count_of_empty > 0:
-            list_of_organells.append([max_count_of_empty, EmptyOrganelle, Cell])
-        if max_count_of_empty > 0:
             list_of_organells.append([max_count_of_axons, EmptyOrganelle, Axon]) # Основа клетки - пустая органелла
+        if max_count_of_empty > 0:
+            list_of_organells.append([max_count_of_empty, EmptyOrganelle, Cell])
 
         count_of_added_organells = sum(self.params["max_count_of_organells"].values()) - (self.params["max_count_of_organells"]["PSD"] if "PSD" in self.params["max_count_of_organells"].keys() else 0)
 
@@ -479,7 +490,8 @@ class MainField:
                                suffix=suffix,
                                length=40)  # длина полосы
 
-            choise_index = np.random.randint(len(list_of_organells))
+            #choise_index = np.random.randint(len(list_of_organells))
+            choise_index = 0 ##################################################################################### Пусть идут по порядку. Сначала огромные митохондрии, потом более маленькие везикулы, а потом все остальные
             max_count, new_organelle, cell_class = list_of_organells[choise_index]
             # индекс 0 зарезервирован под пустоту
             new_index = len(self.cell_list) + 1

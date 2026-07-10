@@ -4,8 +4,9 @@ from Synthetic3D.src.hard.drawing_and_filliing.draw_line_3d import draw_line_3D,
 from Synthetic3D.src.hard.vector_operation import create_new_2d_plane_by_point_and_normal, plane_coord_to_3d, array_plane_coords_to_3d, normalize_vector
 from Synthetic3D.src.hard.drawing_and_filliing.draw_2d import get_circle_point_2D
 from Synthetic3D.src.utilities.logging_config import logger
-from Synthetic3D.src.hard.drawing_and_filliing.fill_sphere import fill_small_sphere
+from Synthetic3D.src.hard.drawing_and_filliing.fill_sphere import fill_small_sphere, fill_sphere_pyvista
 
+import pyvista as pv
 
 def draw_2d_points_in_3d(data, UVpoints, start_point, direction, color, scale):
     u_axis, v_axis = create_new_2d_plane_by_point_and_normal(direction)
@@ -128,3 +129,64 @@ def draw_small_capsule_with_filling(data, point, direction, radius, color_outer,
         fill_small_capsule(data, point, direction, radius, color_outer, delta, scale)
     if radius-thickness > 0:
         fill_small_capsule(data, point, direction, radius-thickness, color_inner, delta, scale)
+
+def fill_cylinder_vista(data, point, direction, radius, color):
+    """
+    Закрашивает цилиндр от point до point+direction с радиусом radius.
+    """
+    if data.ndim == 3:
+        channels = 1
+    elif data.ndim == 4:
+        channels = data.shape[3]
+    else:
+        raise ValueError("data должна быть 3D или 4D")
+
+    if isinstance(color, int) and channels != 1:
+        raise ValueError("Цвет не совпадает с числом каналов")
+    if not isinstance(color, int) and len(color) != channels:
+        raise ValueError("Цвет не совпадает с числом каналов")
+
+    D, H, W = data.shape[:3]
+
+    start = np.array(point, dtype=float)
+    dir_vec = np.array(direction, dtype=float)
+    length = np.linalg.norm(dir_vec)
+    if length == 0:
+        return  # цилиндр нулевой длины не рисуем
+
+    center = start + dir_vec / 2.0
+
+    # Создаём цилиндр с осью вдоль direction, длиной length, центром в center
+    cyl = pv.Cylinder(
+        center=center,
+        direction=dir_vec,
+        radius=radius,
+        height=length
+    )
+
+    # Вокселизируем и накладываем на массив
+    voxel_grid = cyl.voxelize(spacing=1)
+    voxel_points = voxel_grid.points
+    indices = np.round(voxel_points).astype(int)
+
+    valid = (
+        (indices[:, 0] >= 0) & (indices[:, 0] < W) &
+        (indices[:, 1] >= 0) & (indices[:, 1] < H) &
+        (indices[:, 2] >= 0) & (indices[:, 2] < D)
+    )
+    idx = indices[valid]
+
+    if len(idx) == 0:
+        return
+
+    if channels == 1:
+        data[idx[:, 2], idx[:, 1], idx[:, 0]] = color
+    else:
+        data[idx[:, 2], idx[:, 1], idx[:, 0]] = np.array(color, dtype=data.dtype)
+
+def fill_capsule_vista(data, point, direction, radius, color):
+    # Две сферы на концах
+    fill_sphere_pyvista(data, point, radius, color)
+    fill_sphere_pyvista(data, point + direction, radius, color)
+    # Цилиндр между ними
+    fill_cylinder_vista(data, point, direction, radius, color)

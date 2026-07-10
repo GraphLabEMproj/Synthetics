@@ -16,6 +16,10 @@ from Synthetic3D.src.hard.random_params import get_rand_int, get_color_index_fun
 
 from Synthetic3D.src.container.psd import PSD
 
+from scipy.ndimage import binary_dilation, generate_binary_structure
+
+
+
 class Cell():
     """
     Класс представляющий клетку и содержащий код для её расширения. Стартует из зоны вокруг органелл.
@@ -95,22 +99,22 @@ class Cell():
 
     def ExpansionOfRegion(self, data):
         assert len(data.shape) == 3 or data.shape[3] == 1, "Данные для алгоритма разрастания должны иметь 3 оси и 1 канал."
-        index_kernel = np.array([
-            (dz, dy, dx)
-            for dz in (-1, 0, 1)
-            for dy in (-1, 0, 1)
-            for dx in (-1, 0, 1)
-            if not (dz == 0 and dy == 0 and dx == 0)
-        ], dtype=int)
-        probability_kernel = np.array([
-            1 / (abs(dz) + abs(dy) + abs(dx))
-            for dz in (-1, 0, 1)
-            for dy in (-1, 0, 1)
-            for dx in (-1, 0, 1)
-            if not (dz == 0 and dy == 0 and dx == 0)
-        ])
-
         if len(self.work_points) > 0:
+            index_kernel = np.array([
+                (dz, dy, dx)
+                for dz in (-1, 0, 1)
+                for dy in (-1, 0, 1)
+                for dx in (-1, 0, 1)
+                if not (dz == 0 and dy == 0 and dx == 0)
+            ], dtype=int)
+            probability_kernel = np.array([
+                1 / (abs(dz) + abs(dy) + abs(dx))
+                for dz in (-1, 0, 1)
+                for dy in (-1, 0, 1)
+                for dx in (-1, 0, 1)
+                if not (dz == 0 and dy == 0 and dx == 0)
+            ])
+
             self.work_points = np.array(self.work_points, dtype=np.int32)
             new_points = []
             for work_point in self.work_points:
@@ -164,21 +168,55 @@ class Cell():
         radius = get_rand_int(params.get("psd", {"radius": 12}).get("radius", 12))
         radius_with_gap = radius + gap_area                                                                            ########################### PSD
         max_attempt = params.get("psd", {"max_attempt": 2000}).get("max_attempt", 2000)
+        # В начале метода, после задания radius_with_gap и max_attempt:
+        border_margin = params.get("psd", {}).get("border_margin", 20)   # минимальный отступ от границ объёма
 
-        # 1. Все координаты мембраны данной клетки (отрицательные значения = -self.index)
-        membrane_coords = np.argwhere(cell_fields == -self.index)  # (N, 3) в порядке (z,y,x)
-        if membrane_coords.shape[0] == 0:
-            logger.cell(f"Нет мембраны для клетки {self.index}")
+
+        # 1. Маска мембраны данной клетки
+        membrane_mask = (cell_fields == -self.index)
+
+        # 2. Ищем воксели, где рядом (в окрестности, например, 3x3x3) есть мембрана другой клетки (не аксон)
+        struct = generate_binary_structure(3, 1)  # связность 6- или 26-соседей
+        # все мембраны (отрицательные значения)
+        all_membranes = (cell_fields < 0)
+        # мембраны аксонов (можно исключить)
+        if axon_indices:
+            axon_masks = np.any([cell_fields == -ax for ax in axon_indices], axis=0)
+            all_membranes_except_axons = all_membranes & ~axon_masks
+        else:
+            all_membranes_except_axons = all_membranes
+
+        # находим соседей для каждого вокселя мембраны клетки, которые принадлежат другим клеткам
+        # (простой способ — дилатировать нужные мембраны и пересечь с маской нашей клетки)
+        other_membranes = all_membranes_except_axons & ~membrane_mask
+        # расширяем other_membranes на 1 воксель, чтобы захватить прилегающие воксели нашей мембраны
+        contact_mask = binary_dilation(other_membranes, structure=struct, iterations=1) & membrane_mask
+
+        # 3. Дополнительно отбрасываем точки, близкие к краю объёма данных (отступ >= border_margin)
+        border_mask = np.ones(cell_fields.shape, dtype=bool)
+        border_mask[:border_margin, :, :] = False
+        border_mask[-border_margin:, :, :] = False
+        border_mask[:, :border_margin, :] = False
+        border_mask[:, -border_margin:, :] = False
+        border_mask[:, :, :border_margin] = False
+        border_mask[:, :, -border_margin:] = False
+
+        valid_contact_mask = contact_mask & border_mask
+
+        # 4. Координаты подходящих точек
+        candidate_coords = np.argwhere(valid_contact_mask)
+        if candidate_coords.shape[0] == 0:
+            logger.cell(f"Нет подходящих стыков для PSD клетки {self.index}")
             return None
 
         shape = cell_fields.shape  # (Z, Y, X)
         found = False
         center = None
 
-        for attempt in range(max_attempt):
-            # 2. Случайная точка на мембране
-            idx = np.random.choice(membrane_coords.shape[0])
-            center = membrane_coords[idx]  # (z, y, x)
+        # 5. Делаем ограниченное число попыток, но уже по «чистым» кандидатам
+        for attempt in range(min(max_attempt, candidate_coords.shape[0])):
+            idx = np.random.choice(candidate_coords.shape[0])
+            center = candidate_coords[idx]  # (z, y, x)
 
             # 3. Ограниченный подкуб вокруг центра
             z_min = max(0, center[0] - radius_with_gap)
@@ -233,7 +271,7 @@ class Cell():
             params=params,
             unique_indexes=other_cells
         )
-        self.list_of_organells.insert(0, psd) # PSD должны рисоваться раньше везикул.
+        self.list_of_organells.append(psd) # PSD должны рисоваться раньше везикул.
 
     def DrawOrganelles(self, data, cell_fields=None):
         for organell in self.list_of_organells:

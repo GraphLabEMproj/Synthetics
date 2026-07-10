@@ -5,7 +5,7 @@ from Synthetic3D.src.utilities.logging_config import logger
 from Synthetic3D.src.hard.random_params import get_rand_int, color_dim_check
 from Synthetic3D.src.hard.drawing_and_filliing.draw_data_by_mask import draw_data_by_mask_and_random_value
 
-from scipy.ndimage import distance_transform_edt, generate_binary_structure, binary_erosion
+from scipy.ndimage import distance_transform_edt, generate_binary_structure, binary_erosion, gaussian_filter
 
 class PSD:
     def __init__(self,
@@ -175,6 +175,10 @@ class PSD:
 
         start_seed_mask_1 = gap_crop if np.any(gap_crop) else contact1
         membrane1_crop = self._expand_inside(start_seed_mask_1, cell1_mask, pre_th) & ~gap_crop & sphere_crop
+        if not np.any(membrane1_crop):
+            logger.organelle("\tИсправление пресинаптической границы")
+            membrane1_crop = self._expand_inside(start_seed_mask_1, cell1_mask, pre_th+1) & ~gap_crop & sphere_crop
+
         start_seed_mask_2 = gap_crop if np.any(gap_crop) else contact2
         membrane2_crop = self._expand_inside(start_seed_mask_2, cell2_mask, post_th) & ~gap_crop & sphere_crop
         shading_crop = self._expand_inside(membrane2_crop, cell2_mask, out_th) & ~membrane2_crop & sphere_crop
@@ -190,17 +194,99 @@ class PSD:
         self.mask_post_membrane[slices] = membrane2_crop
         self.mask_shading[slices] = shading_crop
 
+        self.mask_sphere = mask_sphere
+        self.sphere_center = center
+        self.sphere_radius = radius
+
         self.psd_mask = self.mask_pre_membrane | self.mask_post_membrane | self.mask_gap
 
         # ---- Зануляем в оригинальном cell_fields ----
         cell_fields[self.psd_mask | self.mask_shading] = 0
         cell_fields[mask_sphere & (cell_fields < 0)] = 0
 
+    def _get_sphere_crop_slices(self, shape, margin=None):
+        """
+        Возвращает срезы подкуба, содержащего сферу с отступом margin.
+        Если margin не задан, берётся sphere_radius // 2 для захвата фона.
+        """
+        cz, cy, cx = self.sphere_center
+        r = self.sphere_radius
+        if margin is None:
+            margin = max(r // 2, 5)  # минимум 5, чтобы точно захватить фон
+        z_min = max(0, cz - r - margin)
+        z_max = min(shape[0], cz + r + margin + 1)
+        y_min = max(0, cy - r - margin)
+        y_max = min(shape[1], cy + r + margin + 1)
+        x_min = max(0, cx - r - margin)
+        x_max = min(shape[2], cx + r + margin + 1)
+        slices = (slice(z_min, z_max), slice(y_min, y_max), slice(x_min, x_max))
+
+        shape_crop = (z_max - z_min, y_max - y_min, x_max - x_min)
+        center_crop = (cz - z_min, cy - y_min, cx - x_min)
+        Z, Y, X = np.ogrid[:shape_crop[0], :shape_crop[1], :shape_crop[2]]
+        sphere_crop = (Z - center_crop[0])**2 + (Y - center_crop[1])**2 + (X - center_crop[2])**2 <= r**2
+
+        return slices, sphere_crop, center_crop
+
+    def _apply_sphere_gradient(self, data):
+        """
+        Гауссово размытие с малым радиусом вокруг PSD.
+        Размывается всё внутри сферы (включая shading), но pre/post/gap
+        восстанавливаются в исходном виде, чтобы остаться чёткими.
+        Их цвет расплывается наружу и плавно переходит в фон.
+        """
+        if not hasattr(self, 'mask_sphere') or self.mask_sphere is None:
+            return
+
+        # Маски, которые не должны размываться (останутся резкими)
+        keep_sharp = self.mask_pre_membrane | self.mask_post_membrane | self.mask_gap
+        # Область внутри сферы, которую можно размыть
+        blur_mask = self.mask_sphere & ~keep_sharp
+        if not np.any(blur_mask):
+            return
+
+        # Малый радиус размытия (можно настроить)
+        sigma = max(1.0, self.sphere_radius / 4.0)   # например, радиус/4, минимум 1
+        margin = int(np.ceil(3 * sigma))              # запас для захвата фона
+
+        # Расширенный подкуб
+        slices, big_sphere_crop, _ = self._get_sphere_crop_slices(data.shape[:3], margin=margin)
+        data_crop = data[slices].copy()
+        blur_crop = blur_mask[slices]   # маска в подкубе
+        keep_crop = keep_sharp[slices]  # резкие области в подкубе
+
+        # Размываем весь подкуб (чтобы цвет от keep_sharp тоже расплылся)
+        if data_crop.ndim == 3:
+            blurred = gaussian_filter(data_crop.astype(np.float32), sigma=sigma,
+                                      mode='nearest')
+            # Возвращаем резкие значения для keep_sharp
+            blurred[keep_crop] = data_crop[keep_crop].astype(np.float32)
+            # Записываем результат только в blur_mask
+            if np.issubdtype(data_crop.dtype, np.integer):
+                data_crop[blur_crop] = np.round(blurred[blur_crop]).astype(data_crop.dtype)
+            else:
+                data_crop[blur_crop] = blurred[blur_crop].astype(data_crop.dtype)
+
+        elif data_crop.ndim == 4:
+            sigma_full = (sigma, sigma, sigma, 0)   # не смешиваем каналы
+            blurred = gaussian_filter(data_crop.astype(np.float32), sigma=sigma_full,
+                                      mode='nearest')
+            blurred[keep_crop] = data_crop[keep_crop].astype(np.float32)
+            if np.issubdtype(data_crop.dtype, np.integer):
+                data_crop[blur_crop] = np.round(blurred[blur_crop]).astype(data_crop.dtype)
+            else:
+                data_crop[blur_crop] = blurred[blur_crop].astype(data_crop.dtype)
+
+        data[slices] = data_crop
+
     def Draw(self, data):
         draw_data_by_mask_and_random_value(data, self.mask_shading  , self.params["out_color_param"])
         draw_data_by_mask_and_random_value(data, self.mask_pre_membrane, self.params["synapse_color_param"])
         draw_data_by_mask_and_random_value(data, self.mask_post_membrane, self.params["synapse_color_param"])
         draw_data_by_mask_and_random_value(data, self.mask_gap      , self.params["gap_color_param"])
+
+        # --- Градиентное затухание ---
+        self._apply_sphere_gradient(data)
 
     def DrawMask(self, mask_data, color=None):
         """Закрашивает маску PSD указанным цветом"""

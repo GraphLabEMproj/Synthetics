@@ -33,6 +33,9 @@ class EmptyOrganelle(Organell):
     def Draw(self, data): pass # не умеет рисоваться, только создавать маски зерна территории
     def DrawMask(self, mask_data, color): pass # не умеет рисоваться, только создавать маски зерна территории
 
+    def update_draw_config(self, config):
+        pass
+
     ####################################################################################################################### придумать что-то поэффективнее и универсальнее чем копия 2 алгоритмов рисования и заполнения малой сферы
     def DrawArea(self, cell_data, color) -> list[Vector]:
         #work_color = color_dim_check(color, cell_data.shape)

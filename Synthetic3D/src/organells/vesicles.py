@@ -225,7 +225,6 @@ class Vesicles(Organell):
         vesicle.indices = [i + start_index_val for i in range(len(new_points))]
         self.vesicle_objects.append(vesicle)
 
-
         ######################################################################################################################## PARAM !
         probability_of_vesicle_filling = self.params["probability_of_vesicle_filling"]
         self.filling_list = [get_bool_rand_probability(probability_of_vesicle_filling)]
@@ -373,25 +372,26 @@ class Vesicles(Organell):
 
         # 1. Рисование исходных везикул
         for vesicle in self.vesicle_objects:
-            vesicle.DrawOneVesicleArea(cell_data, color, self.view_shell.get_frames())
+            vesicle.DrawOneVesicleMask(cell_data, color, self.view_shell.get_frames())
 
         # 2. Морфологическое закрытие: 20 дилатаций + 20 эрозий ядром 3×3×3
         mask = (cell_data == color)                    # бинарная маска объекта
         struct = generate_binary_structure(3, 1)
 
         # Расширение (заполняет промежутки между везикулами, сглаживает впадины)
-        dilated = binary_dilation(mask, structure=struct, iterations=20)
+        dilated = binary_dilation(mask, structure=struct, iterations=40)
         # Сужение (восстанавливает размер, сглаживая выступы)
-        closed_mask = binary_erosion(dilated, structure=struct, iterations=20, border_value=True)
-
+        closed_mask = binary_erosion(dilated, structure=struct, iterations=40, border_value=True)
+        # Не пересекаем чужую область
+        free_mask = closed_mask & (cell_data == 0)
         # Обновляем тензор: все воксели внутри закрытой маски получают цвет объекта
-        cell_data[closed_mask] = color
+        cell_data[free_mask] = color
 
         # 3. Вычисление граничных вокселей (поверхность)
-        eroded = binary_erosion(closed_mask, structure=struct, iterations=1)
-        boundary_mask = closed_mask & ~eroded          # объект минус его эрозия
+        transform_mask = (cell_data == color)
+        eroded = binary_erosion(transform_mask, structure=struct, iterations=1)
+        boundary_mask = transform_mask & ~eroded          # объект минус его эрозия
 
         coords = np.argwhere(boundary_mask)            # массив (N, 3) координат
-        new_pos_list = [Vector(x, y, z) for x, y, z in coords]
-
+        new_pos_list = [Vector(x, y, z) for z, y, x in coords]
         return new_pos_list

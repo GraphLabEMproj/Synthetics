@@ -14,13 +14,13 @@
         "Mitohondrion": 15,
         "Vesicles": 15,
         "EmptyCell": 48,
-        "Axon": 3,
-        "PSD": 15
+        "Axon": 4,
+        "PSD": 30
     },
 
     "backgraund": {
-        "background_color": [187, 10],
-        "background_noise_color": [95, 20],
+        "background_color": [187, 20],
+        "background_noise_color": [110, 15],
         "density": 0.0015,
         "gaussian_radius": 4,
         "gaussian_sigma": 2
@@ -41,17 +41,17 @@
     "axon" : {
         "membrane_thickness": [5,10],
         "membrane_color_param": [74, 20],
-        "inner_thickness": [10, 20],
+        "inner_thickness": [7, 14],
         "inner_color_param": [135, 30],
         "input_membrane_thickness": [4,6]
     },
 
     "vesicles": {
         "vesicle_packing_fraction": [0.25, 0.5],
-        "radius_of_vesicle": [4, 6],
-        "membrane_color": [84, 20],
-        "inner_color": [110, 12],
-        "probability_of_vesicle_filling": 1.0,
+        "radius_of_vesicle": [3, 6],
+        "membrane_color": [85, 10],
+        "inner_color": [120, 7],
+        "probability_of_vesicle_filling": 1,
         "gap_of_vesicules": 0,
         "thickness" : [1, 2],
         "ellipsoid_shape_radius": [[70, 120],[40, 80],[30, 60]]
@@ -61,23 +61,23 @@
         "radius_of_section": [20, 42],
         "len_of_mitohondrion": [384, 768],
         "membrane_thickness": [3,5],
-        "mito_membrane_color": [93, 30],
-        "matrix_color": [125, 35],
-        "cristae_membrane_color": [93, 39],
+        "mito_membrane_color": [93, 20],
+        "matrix_color": [125, 22],
+        "cristae_membrane_color": [93, 29],
         "cristae_radius": [3, 6],
-        "cristae_color": [152, 36],
+        "cristae_color": [152, 22],
         "cristae_thickness": [1,2],
         "num_partition_of_triangles":3
    },
 
     "psd" : {
         "radius": [15, 40],
-        "presynapse_thickness": [3,5],
+        "presynapse_thickness": [2,4],
         "postsynapse_thickness": [3,5],
-        "synapse_color_param": [54, 15],
-        "gap_thickness": [0, 3],
-        "gap_color_param": [110, 20],
+        "synapse_color_param": [64, 8],
+        "gap_thickness": [0, 2],
+        "gap_color_param": [110, 10],
         "out_thickness": [10, 20],
-        "out_color_param": [104, 40]
+        "out_color_param": [95, 25]
     }
 }

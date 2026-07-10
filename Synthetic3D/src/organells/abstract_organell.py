@@ -54,6 +54,9 @@ class Organell(abc.ABC):
     def _check_and_set_default_params(self) -> list[str]: pass # задает параметры генерации класса, если они не были заданы
 
     @abc.abstractmethod
+    def update_draw_config(self, config): pass
+
+    @abc.abstractmethod
     def _Create(self) -> list[str]: pass # генерирует форму, возвращает список с варнингами
 
     @abc.abstractmethod

@@ -294,5 +294,5 @@ def run_check_statistic_syn_dataset(syn_dataset_path, view_data=False):
     #printTreePlot('Ground', bin_edges, o_ground, ground2, sumground, syn_dataset_path)
 
 if __name__ == "__main__":
-    syn_dataset_path = r"D:/Projects/Synthetics/Synthetic3D/datasets/dataset_2026_07_04__00_30_29"
+    syn_dataset_path = r"D:/Projects/Synthetics/Synthetic3D/datasets/dataset_2026_07_09__23_19_24"
     run_check_statistic_syn_dataset(syn_dataset_path, view_data=True)
